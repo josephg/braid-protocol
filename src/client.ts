@@ -118,7 +118,8 @@ export function listenRaw(url: string, opts: StateClientOptions = {}) {
     const res = await fetch(url, {
       // url,
       headers: {
-        'accept-patch': 'merge-object'
+        'accept-patch': 'merge-object',
+        'subscribe': 'keep-alive'
       },
     })
 
