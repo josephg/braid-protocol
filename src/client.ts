@@ -90,19 +90,20 @@ async function *readHTTPChunks(res: Response) {
     // We're in nodejs land, and the body is a nodejs stream object.
     const body = res.body as any as AsyncIterable<Uint8Array>
     for await (const item of body) {
-      // console.log('item', item)
       yield* append(new TextDecoder('utf-8').decode(item))
     }
   } else {
-    throw Error('Fetch implementation streaming not supported')
-    // const reader = res.body!.getReader()
+    // We're in browser land and we can get a ReadableStream
+    const reader = res.body!.getReader()
 
-    // while (true) {
-    //   // Why u no implement asynciterable?
-    //   const {value, done} = await reader.read()
-    //   if (done) break
-    //   console.log('got', value)
-    // }
+    while (true) {
+      const { value, done } = await reader.read()
+      if (!done) {
+        yield* append(new TextDecoder('utf-8').decode(value))
+      } else {
+        break
+      }
+    }
   }
 }
 
