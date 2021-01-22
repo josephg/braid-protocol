@@ -119,7 +119,7 @@ export default function stream<T>(res: ServerResponse & MaybeFlushable, opts: St
     if (connected) {
       for await (const val of stream.iter) {
         if (!connected) break
-        console.log('got val', val)
+        // console.log('got val', val)
 
         const data = Buffer.from(`${val.data}\n`, 'utf8')
 
@@ -145,7 +145,7 @@ export default function stream<T>(res: ServerResponse & MaybeFlushable, opts: St
     let message: StateMessage = {data: patch}
     if (version != null) message.version = version
 
-    console.log('append', message)
+    // console.log('append', message)
     stream.append(message)
   }
 
