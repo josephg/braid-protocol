@@ -56,7 +56,7 @@ function stream(res, opts = {}) {
             for await (const val of stream.iter) {
                 if (!connected)
                     break;
-                console.log('got val', val);
+                // console.log('got val', val)
                 const data = Buffer.from(`${val.data}\n`, 'utf8');
                 const patchHeaders = {
                     // 'content-type': 'application/json',
@@ -79,7 +79,7 @@ function stream(res, opts = {}) {
         let message = { data: patch };
         if (version != null)
             message.version = version;
-        console.log('append', message);
+        // console.log('append', message)
         stream.append(message);
     };
     if (opts.initialValue !== undefined) {
