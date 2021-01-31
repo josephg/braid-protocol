@@ -13,7 +13,7 @@ polka()
 })
 .get('/time', (req, res) => {
   let timer
-  
+
   if (req.headers.subscribe === "keep-alive") {
     const stream = makeStream(res, {
       initialValue: new Date().toLocaleString(),

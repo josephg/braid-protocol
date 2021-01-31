@@ -1,5 +1,4 @@
 import 'isomorphic-fetch'
-import {PassThrough, Readable} from 'stream'
 import asynciter from 'ministreamiterator'
 
 const merge = <T>(value: T, patchType: string, patch: any): T => {
@@ -134,7 +133,7 @@ export function listenRaw(url: string, opts: StateClientOptions = {}) {
   return values.iter
 }
 
-export default async function* listen(url: string, opts: StateClientOptions = {}) {
+export async function* listen(url: string, opts: StateClientOptions = {}) {
   let value: any
   let patchType = 'snapshot'
 
