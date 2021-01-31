@@ -1,6 +1,18 @@
 # What is this?
 
-This is a bare bones implementation of the braid protocol.
+This is a simple implementation of the braid protocol.
+
+It implements simple server and client implementations of the protocol, for use in nodejs and the browser.
+
+# Getting started
+
+> TODO: These libraries have not yet been published on npm.
+
+## From source
+
+This repository uses a tiny monorepo style. After git cloning, run `yarn` from the root directory of this repository to set everything up.
+
+# Code Examples
 
 I want to explore a few use cases. From simplest to most complicated:
 
@@ -26,3 +38,13 @@ For each case I want:
 
 I also want a simple web UI which can connect to any supported URL and show the value updating over time.
 
+
+# License
+
+> ISC license
+
+Copyright © 2020-2021
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED “AS IS” AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
