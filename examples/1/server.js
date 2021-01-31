@@ -2,7 +2,7 @@ const polka = require('polka')
 const makeStream = require('@josephg/braid-server')
 const fs = require('fs')
 
-const getDate = () => new Date().toLocaleString()
+const getDate = () => (new Date().toLocaleString() + '\n')
 
 
 polka()
@@ -16,7 +16,7 @@ polka()
 
   if (req.headers.subscribe === "keep-alive") {
     const stream = makeStream(res, {
-      initialValue: new Date().toLocaleString(),
+      initialValue: getDate(),
       contentType: 'text/plain',
       onclose() {
         clearInterval(timer)

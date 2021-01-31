@@ -1,4 +1,4 @@
-import { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "http";
+import { ServerResponse } from "http";
 import asyncstream from 'ministreamiterator'
 
 interface StateServerOpts<T> {
@@ -121,7 +121,7 @@ export default function stream<T>(res: ServerResponse & MaybeFlushable, opts: St
         if (!connected) break
         // console.log('got val', val)
 
-        const data = Buffer.from(`${val.data}\n`, 'utf8')
+        const data = Buffer.from(`${val.data}`, 'utf8')
 
         const patchHeaders: Record<string, string> = {
           // 'content-type': 'application/json',

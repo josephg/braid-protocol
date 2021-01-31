@@ -106,7 +106,7 @@ async function *readHTTPChunks(res: Response) {
   }
 }
 
-export function listenRaw(url: string, opts: StateClientOptions = {}) {
+export function subscribeRaw(url: string, opts: StateClientOptions = {}) {
   console.log('listen', url)
 
   const values = asynciter<{
@@ -124,8 +124,6 @@ export function listenRaw(url: string, opts: StateClientOptions = {}) {
     })
 
     for await (const {header, data: patch} of readHTTPChunks(res)) {
-      // console.log('hd', header, data)
-
       values.append({header, patch})
     }
   })()
@@ -133,11 +131,11 @@ export function listenRaw(url: string, opts: StateClientOptions = {}) {
   return values.iter
 }
 
-export async function* listen(url: string, opts: StateClientOptions = {}) {
+export async function* subscribe(url: string, opts: StateClientOptions = {}) {
   let value: any
   let patchType = 'snapshot'
 
-  for await (const {header, patch} of listenRaw(url, opts)) {
+  for await (const {header, patch} of subscribeRaw(url, opts)) {
     if (header['patch-type']) patchType = header['patch-type']
     value = merge(value, patchType, patch)
     yield {value, header, patch}
