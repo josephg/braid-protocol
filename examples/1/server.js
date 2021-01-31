@@ -1,5 +1,5 @@
 const polka = require('polka')
-const makeStream = require('braid-server')
+const makeStream = require('@josephg/braid-server')
 const fs = require('fs')
 
 const getDate = () => new Date().toLocaleString()
