@@ -54,7 +54,7 @@ const searchHeaderGap = (buf: Uint8Array): null | [string, number] => {
 
 const decoder = new TextDecoder()
 
-async function *readHTTPChunks(res: Response) {
+async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
   // Tiny state machine. We swap back and forth from reading the headers <->
   // reading data. Every chunk must contain a content-length field.
   const enum State {
@@ -64,7 +64,7 @@ async function *readHTTPChunks(res: Response) {
   let buffer = new Uint8Array() // never used.
   let headers: Record<string, string> | null = null
 
-  function *append(s: Uint8Array) {
+  function *append(s: Uint8Array): Generator<PatchData> {
     // This is pretty inefficient, but its probably fine.
     buffer = concatBuffers(buffer, s)
 
@@ -139,6 +139,11 @@ export interface SubscribeOptions {
   reqHeaders?: Record<string, string>,
 }
 
+type PatchData = {
+  headers: Record<string, string>,
+  data: Uint8Array
+}
+
 export async function subscribeRaw(url: string, opts: SubscribeOptions = {}) {
   const res = await fetch(url, {
     // url,
@@ -160,7 +165,24 @@ export async function subscribeRaw(url: string, opts: SubscribeOptions = {}) {
 
 export interface StateClientOptions<T = any> {
   toDoc?: (contentType: string, content: Uint8Array) => T,
-  applyPatch?: (prevValue: T, patchType: string, patch: Uint8Array) => T
+  applyPatch?: (prevValue: T, patchType: string, patch: Uint8Array) => T,
+
+  /**
+   * If the client knows the value of the document at some specified version,
+   * set knownDoc and knownAtVersion. The server can elide intervening
+   * operations and just bring the client up to date.
+   */
+  knownDoc?: T,
+  knownAtVersion?: string,
+
+  /**
+   * If knownAtVersion is behind the current server version, emit all
+   * intermediate operations in the iterator. Do not wait until the client is
+   * up-to-date before returning.
+   *
+   * Has no effect if knownAtVersion is unset.
+   */
+  emitAllPatches?: boolean,
 }
 
 const defaultToDoc = (contentType: string, content: Uint8Array) => {
@@ -184,24 +206,67 @@ const defaultToDoc = (contentType: string, content: Uint8Array) => {
 //   }
 // }
 
-export async function* subscribe(url: string, opts: StateClientOptions = {}) {
-  let value: any = undefined
+export async function subscribe(url: string, opts: StateClientOptions = {}) {
+  let value: any = opts.knownDoc
+  let version: string | null = opts.knownAtVersion ?? null
+
+  const reqHeaders: Record<string, string> = {}
+  if (opts.knownAtVersion != null) reqHeaders['version'] = opts.knownAtVersion
 
   const {streamHeaders, patches} = await subscribeRaw(url)
   const contentType = streamHeaders['content-type']
+  const upToDateVersion: string | null = streamHeaders['version'] ?? null
   let patchType = streamHeaders['patch-type'] || 'snapshot'
 
-  // TODO: Return through a promise when content is up to date.
-  for await (const {headers, data} of patches) {
+  const apply = ({headers, data}: PatchData) => {
     if (headers['patch-type']) patchType = headers['patch-type']
+    if (headers['version']) version = headers['version']
 
     if (patchType === 'snapshot') {
       value = (opts.toDoc ?? defaultToDoc)(contentType, data)
-      yield {value, headers}
+      // return {value, headers}
     } else {
       if (!opts.applyPatch) throw Error('Cannot patch documents without an apply function')
       value = opts.applyPatch(value, patchType, data)
-      yield {value, headers, patch: data}
+      // return {value, headers, patch: data}
     }
+  }
+
+  // This method will wait until we have the first known-good value before
+  // returning. There's three cases when this happens. Either:
+  //
+  // 1. The client already knows the value at the current version
+  //    (upToDateVersion === knownAtVersion).
+  // 2. There is no known version. The first message from the server should have
+  //    a snapshot. Return that.
+  // 3. We're behind. If opts.emitAllPatches then we emit immediately. Otherwise
+  //    wait until we're up to date before emitting anything.
+
+  if (upToDateVersion == null) { // Case 2.
+    // Consume the first patch no matter what. It will usually be a snapshot.
+    const patch = await patches.next()
+    if (!patch.done) apply(patch.value)
+  } else { // Cases 1 and 3
+    if (!opts.emitAllPatches || version == null) {
+      while (version !== upToDateVersion) { // Case 3.
+        const patch = await patches.next()
+        if (patch.done) break
+        apply(patch.value)
+      }
+    }
+  }
+
+  async function *consumePatches() {
+    for await (const patch of patches) {
+      apply(patch)
+      yield {value, version, patch}
+    }
+  }
+
+  return {
+    initialValue: value,
+    initialVersion: version,
+    streamHeaders,
+    stream: consumePatches()
   }
 }

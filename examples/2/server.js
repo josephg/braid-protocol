@@ -14,7 +14,10 @@ setInterval(() => {
   doc = result
 
   for (const c of clients) {
-    c.append({data: JSON.stringify(op) + '\n'})
+    c.append({
+      patchType: 'ot-text-unicode',
+      data: JSON.stringify(op) + '\n'
+    })
   }
 }, 1000)
 
@@ -30,7 +33,6 @@ polka()
     reqHeaders: req.headers,
     initialValue: doc + '\n',
     contentType: 'text/plain',
-    patchType: 'ot-text-unicode',
     onclose() {
       if (stream) clients.delete(stream)
     }

@@ -43,6 +43,7 @@ export interface MaybeFlushable {
 
 interface StateMessage {
   headers?: {[k: string]: string | any},
+  patchType?: string, // If missing, defaults to 'snapshot'.
   data: string | Buffer, // encoded patch
   version?: string
 }
@@ -150,6 +151,8 @@ export default function stream(res: ServerResponse & MaybeFlushable, opts: State
 
   ;(async () => {
     if (connected) {
+      let lastPatchType = 'snapshot'
+
       for await (const val of stream.iter) {
         if (!connected) break
         // console.log('got val', val)
@@ -163,6 +166,9 @@ export default function stream(res: ServerResponse & MaybeFlushable, opts: State
           ...val.headers
         }
         if (val.version) patchHeaders['version'] = val.version
+        if (val.patchType && val.patchType !== lastPatchType) {
+          patchHeaders['patch-type'] = lastPatchType = val.patchType
+        }
 
         writeHeaders(res, patchHeaders)
         res.write(data)

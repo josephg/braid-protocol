@@ -1,7 +1,9 @@
 const {subscribe} = require('@josephg/braid-client')
 
 ;(async () => {
-  for await (const data of subscribe('http://localhost:2001/time')) {
-    console.log(data)
+  const {initialValue, stream} = await subscribe('http://localhost:2001/time')
+  console.log('initial value', initialValue)
+  for await (const {value} of stream) {
+    console.log(value)
   }
 })()
