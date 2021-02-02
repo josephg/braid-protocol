@@ -1,6 +1,5 @@
 const polka = require('polka')
 const makeStream = require('@josephg/braid-server')
-const fs = require('fs')
 
 const genOp = require('ot-text-unicode/test/genOp')
 let doc = 'hi there'
@@ -23,11 +22,6 @@ setInterval(() => {
 
 
 polka()
-.get('/', (req, res) => {
-  // Could use sirv or something but eh.
-  res.setHeader('content-type', 'text/html')
-  res.end(fs.readFileSync('test.html'))
-})
 .get('/doc', (req, res) => {
   const stream = makeStream(res, {
     reqHeaders: req.headers,

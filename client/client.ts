@@ -86,7 +86,6 @@ async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
             else return [kv[0].toLowerCase(), kv[1]]
           }))
 
-          // console.log('found header section', header)
           state = State.Data
           buffer = buffer.slice(dataOffset)
         }

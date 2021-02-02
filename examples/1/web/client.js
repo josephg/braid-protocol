@@ -11,4 +11,5 @@ elem.innerText = 'loading'
   for await (const {value} of stream) {
     elem.innerText = value
   }
+  elem.innerText = "disconnected"
 })()
