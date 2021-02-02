@@ -1,6 +1,5 @@
 import 'isomorphic-fetch'
-import asynciter, { AsyncIterableIteratorWithRet } from 'ministreamiterator'
-import {uniToStrPos} from 'unicount'
+import {Readable} from 'stream'
 
 const splitOnce = (s: string, sep: string | RegExp): [string, string] | null => {
   const pos = s.search(sep)
@@ -115,22 +114,30 @@ async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
   // some reason. Instead it shows up as a nodejs stream.
   if (res.body && (res.body as any)[Symbol.asyncIterator] != null) {
     // We're in nodejs land, and the body is a nodejs stream object.
-    const body = res.body as any as AsyncIterable<Uint8Array>
+    const body = res.body as any as Readable
+
+    // There's a bug where none of these events fire when the underlying TCP
+    // connection disappears. Its fixed in node-fetch@next.
+
+    // body.on('error', err => console.error(err))
+    // body.on('end', () => console.log('end'))
+    // body.on('close', () => console.log('close'))
+
     for await (const item of body) {
       yield* append(item)
     }
   } else {
     // We're in browser land and we can get a ReadableStream
     const reader = res.body!.getReader()
+    // reader.closed.then(() => console.log('closed'), err => console.error('err', err))
 
-    while (true) {
-      const { value, done } = await reader.read()
-      if (!done) {
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
         yield* append(value!)
-      } else {
-        break
       }
-    }
+    } catch (e) { console.warn('Connection died', e) }
   }
 }
 
