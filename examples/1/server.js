@@ -24,7 +24,7 @@ polka()
     })
 
     timer = setInterval(() => {
-      stream.append(getDate())
+      stream.append({data: getDate()})
     }, 1000)
   } else {
     res.end(getDate())
@@ -32,5 +32,5 @@ polka()
 })
 .listen(2001, err => {
   if (err) throw err
-  console.log('listening on http://localhost:2001/doc')
+  console.log('listening on http://localhost:2001/time')
 })

@@ -1,21 +1,22 @@
 import { ServerResponse } from "http";
 import asyncstream from 'ministreamiterator'
 
-interface StateServerOpts<T> {
+interface StateServerOpts {
   /**
    * Optional headers from request, so we can parse out requested patch type
    * and requested version
    */
-  // reqHeaders?: IncomingHttpHeaders,
+  reqHeaders?: NodeJS.Dict<string | string[]>,
 
   initialVerson?: string
-  initialValue?: T
+  initialValue?: string | Buffer // TODO: Should probably allow ArrayBuffer too.
 
   /** The type of the referred content (content-type if you issued a GET on the resource) */
   contentType?: string
 
   /** Defaults to snapshot - aka, each patch will contain a new copy of the data. */
-  patchType?: 'snapshot' | 'merge-object' | string
+  patchType?: 'snapshot' | 'merge-object' | string,
+  // encodePatch?: (patch: any) => string | Buffer,
 
   // patchMode: 'loose' | 'strict' // ???
 
@@ -30,7 +31,7 @@ interface StateServerOpts<T> {
    * Send a heartbeat message every (seconds). Defaults to every 30 seconds.
    * This is needed to avoid some browsers closing the connection automatically
    * after a 1 minute timeout.
-   * 
+   *
    * Set to `null` to disable heartbeat messages.
    */
   heartbeatSecs?: number | null
@@ -53,6 +54,10 @@ const writeHeaders = (stream: ServerResponse, headers: Record<string, string>) =
   )
 }
 
+const toBuf = (data: string | Buffer): Buffer => (
+  typeof data === 'string' ? Buffer.from(data, 'utf8') : data
+)
+
 /*
 
 Switches:
@@ -69,10 +74,38 @@ Switches:
 
 */
 
-export default function stream<T>(res: ServerResponse & MaybeFlushable, opts: StateServerOpts<T> = {}) {
+function sendInitialValOnly(res: ServerResponse, opts: StateServerOpts) {
+  // TODO: Not actually sure what we should do in this case.
+  if (!opts.initialValue) {
+    throw Error('Cannot send a single value to a client that does not subscribe')
+  }
+
+  const httpHeaders = {
+    ...opts.httpHeaders
+  }
+
+  if (opts.contentType) httpHeaders['content-type'] = opts.contentType
+  if (opts.initialVerson) httpHeaders['version'] = opts.initialVerson
+
+  let bufData = toBuf(opts.initialValue)
+  httpHeaders['content-length'] = bufData.length
+
+  res.writeHead(200, 'OK', httpHeaders)
+  res.end(bufData)
+
+  if (opts.onclose) process.nextTick(opts.onclose)
+}
+
+export default function stream(res: ServerResponse & MaybeFlushable, opts: StateServerOpts = {}) {
   // These headers are sent both in the HTTP response and in the first SSE
   // message, because there's no API for reading these headers back from
   // EventSource in the browser.
+
+  // If the client did not request a subscription, we'll just pass them the
+  // initial value and bail.
+  if (opts.reqHeaders && opts.reqHeaders['subscribe'] !== 'keep-alive') {
+    return sendInitialValOnly(res, opts)
+  }
 
   const httpHeaders: Record<string, string> = {
     'cache-control': 'no-cache',
@@ -106,7 +139,7 @@ export default function stream<T>(res: ServerResponse & MaybeFlushable, opts: St
   //       await new Promise(res => setTimeout(res, 30*1000))
 
   //       if (!connected) break
-        
+
   //       res.write(`:\n`);
   //       // res.write(`event: heartbeat\ndata: \n\n`);
   //       // res.write(`data: {}\n\n`)
@@ -121,7 +154,7 @@ export default function stream<T>(res: ServerResponse & MaybeFlushable, opts: St
         if (!connected) break
         // console.log('got val', val)
 
-        const data = Buffer.from(`${val.data}`, 'utf8')
+        const data = toBuf(val.data)
 
         const patchHeaders: Record<string, string> = {
           // 'content-type': 'application/json',
@@ -138,22 +171,13 @@ export default function stream<T>(res: ServerResponse & MaybeFlushable, opts: St
     }
   })()
 
-  // let headersSent = false
-  const append = (patch: any, version?: string) => {
-    if (!connected) return
-
-    let message: StateMessage = {data: patch}
-    if (version != null) message.version = version
-
-    // console.log('append', message)
-    stream.append(message)
-  }
-
   if (opts.initialValue !== undefined) {
-    append(opts.initialValue, opts.initialVerson)
+    stream.append({
+      data: opts.initialValue, version: opts.initialVerson
+    })
   }
 
-  return { stream, append }
+  return stream
 }
 
 module.exports = stream

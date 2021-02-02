@@ -1,7 +1,16 @@
-const listen = require('braid-protocol/dist/client').default
+const {subscribe} = require('@josephg/braid-client')
+const {type} = require('ot-text-unicode')
+
+const applyPatch = (prev, patchType, patch) => {
+  if (patchType !== 'ot-text-unicode') throw Error('not supported patch type')
+
+  console.log(new TextDecoder().decode(patch))
+  const op = JSON.parse(new TextDecoder().decode(patch))
+  return type.apply(prev, op)
+}
 
 ;(async () => {
-  for await (const data of listen('http://localhost:2000/time')) {
+  for await (const data of subscribe('http://localhost:2002/doc', {applyPatch})) {
     console.log(data)
   }
 })()

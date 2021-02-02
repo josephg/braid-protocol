@@ -6,7 +6,8 @@
   "license": "MIT",
   "dependencies": {
     "isomorphic-fetch": "^3.0.0",
-    "ministreamiterator": "^1.0.0"
+    "ministreamiterator": "^1.0.0",
+    "unicount": "^1.1.0"
   },
   "scripts": {
     "prepare": "tsc"

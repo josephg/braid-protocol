@@ -1,9 +1,23 @@
 const polka = require('polka')
-const makeStream = require('braid-protocol')
+const makeStream = require('@josephg/braid-server')
 const fs = require('fs')
-// const makeStream = require('.')
 
-const getDate = () => new Date().toLocaleString()
+const genOp = require('ot-text-unicode/test/genOp')
+let doc = 'hi there'
+
+// Set of clients to be updated.
+const clients = new Set()
+
+// Every second update the document by modifying it with a patch.
+setInterval(() => {
+  const [op, result] = genOp(doc)
+  doc = result
+
+  for (const c of clients) {
+    c.append({data: JSON.stringify(op) + '\n'})
+  }
+}, 1000)
+
 
 polka()
 .get('/', (req, res) => {
@@ -11,26 +25,19 @@ polka()
   res.setHeader('content-type', 'text/html')
   res.end(fs.readFileSync('test.html'))
 })
-.get('/time', (req, res) => {
-  let timer
-
-  if (req.headers.subscribe === "keep-alive") {
-    const stream = makeStream(res, {
-      initialValue: new Date().toLocaleString(),
-      contentType: 'text/plain',
-      onclose() {
-        clearInterval(timer)
-      }
-    })
-
-    timer = setInterval(() => {
-      stream.append(getDate())
-    }, 1000)
-  } else {
-    res.end(getDate())
-  }
+.get('/doc', (req, res) => {
+  const stream = makeStream(res, {
+    reqHeaders: req.headers,
+    initialValue: doc + '\n',
+    contentType: 'text/plain',
+    patchType: 'ot-text-unicode',
+    onclose() {
+      if (stream) clients.delete(stream)
+    }
+  })
+  if (stream) clients.add(stream)
 })
-.listen(2000, err => {
+.listen(2002, err => {
   if (err) throw err
-  console.log('listening on http://localhost:2000/time')
+  console.log('listening on http://localhost:2002/doc')
 })
