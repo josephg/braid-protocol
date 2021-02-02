@@ -1,8 +1,8 @@
+import asyncstream from 'ministreamiterator'
 import { ServerResponse } from 'http'
-import asyncstream, { Stream } from 'ministreamiterator'
-
-// TODO: Should probably allow ArrayBuffer too.
-export type StringLike = string | Buffer
+import { StateMessage, BraidStream } from './BraidStream'
+import { StringLike } from './StringLike'
+import { toBuf, writeHeaders } from './utils'
 
 interface StateServerOpts {
   /**
@@ -44,29 +44,6 @@ export interface MaybeFlushable {
   flush?: () => void
 }
 
-interface StateMessage {
-  headers?: { [k: string]: string | any }
-  patchType?: string // If missing, defaults to 'snapshot'.
-  data: StringLike // encoded patch
-  version?: string
-}
-
-export type BraidStream = Stream<StateMessage>
-
-const writeHeaders = (
-  stream: ServerResponse,
-  headers: Record<string, string>
-) => {
-  stream.write(
-    Object.entries(headers)
-      .map(([k, v]) => `${k}: ${v}\r\n`)
-      .join('') + '\r\n'
-  )
-}
-
-const toBuf = (data: StringLike): Buffer =>
-  typeof data === 'string' ? Buffer.from(data, 'utf8') : data
-
 /*
 
 Switches:
@@ -107,7 +84,7 @@ function sendInitialValOnly(res: ServerResponse, opts: StateServerOpts): void {
   if (opts.onclose) process.nextTick(opts.onclose)
 }
 
-export default function stream(
+export function stream(
   res: ServerResponse & MaybeFlushable,
   opts: StateServerOpts = {}
 ): BraidStream | void {
@@ -198,5 +175,3 @@ export default function stream(
 
   return stream
 }
-
-module.exports = stream

@@ -1,5 +1,5 @@
 const polka = require('polka')
-const makeStream = require('@josephg/braid-server')
+const braid = require('@josephg/braid-server')
 
 const genOp = require('ot-text-unicode/test/genOp')
 let doc = 'hi there'
@@ -15,25 +15,24 @@ setInterval(() => {
   for (const c of clients) {
     c.append({
       patchType: 'ot-text-unicode',
-      data: JSON.stringify(op) + '\n'
+      data: JSON.stringify(op) + '\n',
     })
   }
 }, 1000)
 
-
 polka()
-.get('/doc', (req, res) => {
-  const stream = makeStream(res, {
-    reqHeaders: req.headers,
-    initialValue: doc + '\n',
-    contentType: 'text/plain',
-    onclose() {
-      if (stream) clients.delete(stream)
-    }
+  .get('/doc', (req, res) => {
+    const stream = braid.stream(res, {
+      reqHeaders: req.headers,
+      initialValue: doc + '\n',
+      contentType: 'text/plain',
+      onclose() {
+        if (stream) clients.delete(stream)
+      },
+    })
+    if (stream) clients.add(stream)
   })
-  if (stream) clients.add(stream)
-})
-.listen(2002, err => {
-  if (err) throw err
-  console.log('listening on http://localhost:2002/doc')
-})
+  .listen(2002, (err) => {
+    if (err) throw err
+    console.log('listening on http://localhost:2002/doc')
+  })

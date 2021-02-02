@@ -2,7 +2,7 @@ const polka = require('polka')
 const cors = require('cors')
 const fs = require('fs')
 const sirv = require('sirv')
-const makeStream = require('@josephg/braid-server')
+const braid = require('@josephg/braid-server')
 
 const assets = sirv(__dirname + '/web')
 
@@ -19,7 +19,7 @@ polka()
     let timer
 
     if (req.headers.subscribe === 'keep-alive') {
-      const stream = makeStream(res, {
+      const stream = braid.stream(res, {
         initialValue: getDate(),
         contentType: 'text/plain',
         onclose() {
