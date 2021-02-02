@@ -1,26 +1,29 @@
-import { ServerResponse } from "http";
-import asyncstream from 'ministreamiterator'
+import { ServerResponse } from 'http'
+import asyncstream, { Stream } from 'ministreamiterator'
+
+// TODO: Should probably allow ArrayBuffer too.
+export type StringLike = string | Buffer
 
 interface StateServerOpts {
   /**
    * Optional headers from request, so we can parse out requested patch type
    * and requested version
    */
-  reqHeaders?: NodeJS.Dict<string | string[]>,
+  reqHeaders?: NodeJS.Dict<string | string[]>
 
   initialVerson?: string
-  initialValue?: string | Buffer // TODO: Should probably allow ArrayBuffer too.
+  initialValue?: StringLike
 
   /** The type of the referred content (content-type if you issued a GET on the resource) */
   contentType?: string
 
   /** Defaults to snapshot - aka, each patch will contain a new copy of the data. */
-  patchType?: 'snapshot' | 'merge-object' | string,
+  patchType?: 'snapshot' | 'merge-object' | string
   // encodePatch?: (patch: any) => string | Buffer,
 
   // patchMode: 'loose' | 'strict' // ???
 
-  httpHeaders?: {[k: string]: string | any},
+  httpHeaders?: { [k: string]: string | any }
 
   /**
    * Optional event handler called when the peer disconnects
@@ -42,22 +45,27 @@ export interface MaybeFlushable {
 }
 
 interface StateMessage {
-  headers?: {[k: string]: string | any},
-  patchType?: string, // If missing, defaults to 'snapshot'.
-  data: string | Buffer, // encoded patch
+  headers?: { [k: string]: string | any }
+  patchType?: string // If missing, defaults to 'snapshot'.
+  data: StringLike // encoded patch
   version?: string
 }
 
-const writeHeaders = (stream: ServerResponse, headers: Record<string, string>) => {
+export type BraidStream = Stream<StateMessage>
+
+const writeHeaders = (
+  stream: ServerResponse,
+  headers: Record<string, string>
+) => {
   stream.write(
-    Object.entries(headers).map(([k, v]) => `${k}: ${v}\r\n`).join('')
-    + '\r\n'
+    Object.entries(headers)
+      .map(([k, v]) => `${k}: ${v}\r\n`)
+      .join('') + '\r\n'
   )
 }
 
-const toBuf = (data: string | Buffer): Buffer => (
+const toBuf = (data: StringLike): Buffer =>
   typeof data === 'string' ? Buffer.from(data, 'utf8') : data
-)
 
 /*
 
@@ -75,14 +83,16 @@ Switches:
 
 */
 
-function sendInitialValOnly(res: ServerResponse, opts: StateServerOpts) {
+function sendInitialValOnly(res: ServerResponse, opts: StateServerOpts): void {
   // TODO: Not actually sure what we should do in this case.
   if (!opts.initialValue) {
-    throw Error('Cannot send a single value to a client that does not subscribe')
+    throw Error(
+      'Cannot send a single value to a client that does not subscribe'
+    )
   }
 
   const httpHeaders = {
-    ...opts.httpHeaders
+    ...opts.httpHeaders,
   }
 
   if (opts.contentType) httpHeaders['content-type'] = opts.contentType
@@ -97,7 +107,10 @@ function sendInitialValOnly(res: ServerResponse, opts: StateServerOpts) {
   if (opts.onclose) process.nextTick(opts.onclose)
 }
 
-export default function stream(res: ServerResponse & MaybeFlushable, opts: StateServerOpts = {}) {
+export default function stream(
+  res: ServerResponse & MaybeFlushable,
+  opts: StateServerOpts = {}
+): BraidStream | void {
   // These headers are sent both in the HTTP response and in the first SSE
   // message, because there's no API for reading these headers back from
   // EventSource in the browser.
@@ -111,7 +124,7 @@ export default function stream(res: ServerResponse & MaybeFlushable, opts: State
   const httpHeaders: Record<string, string> = {
     'cache-control': 'no-cache',
     'connection': 'keep-alive',
-    ...opts.httpHeaders
+    ...opts.httpHeaders,
   }
 
   let contentType = opts.contentType ?? null
@@ -148,7 +161,6 @@ export default function stream(res: ServerResponse & MaybeFlushable, opts: State
   //     }
   //   })()
   // }
-
   ;(async () => {
     if (connected) {
       let lastPatchType = 'snapshot'
@@ -163,7 +175,7 @@ export default function stream(res: ServerResponse & MaybeFlushable, opts: State
           // 'content-type': 'application/json',
           // 'patch-type': 'snapshot',
           'content-length': `${data.length}`,
-          ...val.headers
+          ...val.headers,
         }
         if (val.version) patchHeaders['version'] = val.version
         if (val.patchType && val.patchType !== lastPatchType) {
@@ -179,7 +191,8 @@ export default function stream(res: ServerResponse & MaybeFlushable, opts: State
 
   if (opts.initialValue !== undefined) {
     stream.append({
-      data: opts.initialValue, version: opts.initialVerson
+      data: opts.initialValue,
+      version: opts.initialVerson,
     })
   }
 
