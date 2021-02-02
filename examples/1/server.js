@@ -1,9 +1,11 @@
 const polka = require('polka')
-const makeStream = require('@josephg/braid-server')
 const fs = require('fs')
+const sirv = require('sirv')
+const makeStream = require('@josephg/braid-server')
+
+const assets = sirv(__dirname + '/web')
 
 const getDate = () => (new Date().toLocaleString() + '\n')
-
 
 polka()
 .get('/', (req, res) => {
@@ -30,7 +32,9 @@ polka()
     res.end(getDate())
   }
 })
+.use(assets)
 .listen(2001, err => {
   if (err) throw err
   console.log('listening on http://localhost:2001/time')
+  console.log('Open http://localhost:2001/ in a browser for a simple demo')
 })
