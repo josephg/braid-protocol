@@ -1,0 +1,20 @@
+# Example 3
+
+This example shows how you could use the braid protocol to do realtime
+collaborative editing using operational transform.
+
+Compared to example 2, this adds some new Stuff:
+
+- Versions. Each operation is versioned on the server
+- IDs. Each operation is assigned an ID in the client. These are used for 2
+  reasons:
+  - The server uses the ID for deduplication (in case messages get resent with
+    bad internet)
+  - The client uses the ID to detect (and discard) its own operations in the
+    operation stream
+- OT. This example does full Operational Transformation in the server and
+  client.
+
+This example is currently a sketch - most of the logic here is hairy and
+extremely difficult to implement correctly. Application authors probably
+shouldn't be doing it! This code should / will be tucked into another library.
