@@ -11,3 +11,5 @@ And in another terminal run:
 ```
 $ node client.js
 ```
+
+Or you can visit [localhost:2001](http://localhost:2001/) in your browser to see the web based demo. (Run `yarn prepare` to rebuild.)

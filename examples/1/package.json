@@ -9,7 +9,6 @@
   "dependencies": {
     "@josephg/braid-client": "*",
     "@josephg/braid-server": "*",
-    "cors": "^2.8.5",
     "polka": "^0.5.2",
     "sirv": "^1.0.11"
   },
