@@ -5,27 +5,32 @@ import makeStream, {Stream} from 'ministreamiterator'
 
 const decoder = new TextDecoder()
 
-interface StreamItem {
-  doc: Post[],
+interface StreamItem<T> {
+  value: T,
+  version: string,
   op: JSONOp,
   isLocal: boolean,
 }
-const stream = makeStream<StreamItem>()
 
 const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => ([
   json1.transformNoConflict(op1, op2, 'left'),
   json1.transformNoConflict(op2, op1, 'right'),
 ])
 
-;(async () => {
-  const {streamHeaders, patches} = await subscribeRaw('http://localhost:2003/doc')
-  console.log('stream headers', streamHeaders)
+const subscribeOT = async <T>(url: string) => {
+  const stream = makeStream<StreamItem<T>>()
 
+  const {streamHeaders, patches} = await subscribeRaw(url)
+  // console.log('stream headers', streamHeaders)
+
+  // The first value should contain the document itself. For now I'm just
+  // hardcoding this - but this should deal correctly with known versions and
+  // all that jazz.
   const first = await patches.next()
   if (first.done) throw Error('No messages in stream')
 
-  console.log('first headers', first.value.headers)
-  let doc: Post[] = JSON.parse(decoder.decode(first.value.data))
+  // console.log('first headers', first.value.headers)
+  let doc: T = JSON.parse(decoder.decode(first.value.data))
   let serverVersion = first.value.headers['version']
 
   // Operations waiting to be sent
@@ -36,8 +41,6 @@ const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => ([
   const processStream = async () => {
     let patchType = 'snapshot'
     for await (const data of patches) {
-      // console.log('patch headers', data.headers)
-
       const id = data.headers['patch-id']
       if (data.headers['patch-type']) patchType = data.headers['patch-type']
 
@@ -59,16 +62,16 @@ const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => ([
         doc = json1.apply(doc as any, op) as any
 
         stream.append({
-          doc,
+          value: doc,
+          version: serverVersion,
           op,
           isLocal: false
         })
-
-        // console.log('Got patch - new serverVersion', serverVersion)
-        // console.log('Doc', doc)
       }
     }
   }
+  // This method is only called once anyway. I'd do it with ;(async () => {})() but for
+  // some reason that confuses the TS typechecker.
   processStream()
 
   const sendInflight = async () => {
@@ -83,7 +86,7 @@ const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => ([
         'parents': serverVersion,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(op)
+      body: JSON.stringify(inflightOp.op)
     })
 
     console.log(await res.text())
@@ -112,7 +115,8 @@ const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => ([
     pendingOp = json1.compose(pendingOp, op)
 
     stream.append({
-      doc,
+      value: doc,
+      version: serverVersion,
       op,
       isLocal: true,
     })
@@ -120,16 +124,25 @@ const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => ([
     flushPending()
   }
 
-  // Submit an operation adding a new entry.
-  const newEntry: Post = {title: 'hi', content: `${Math.random()}`.slice(2)}
-  const op = insertOp([doc.length], newEntry as any)
-  submitChange(op)
-})()
-
-/// *****
+  return {
+    patches: stream.iter,
+    submitChange,
+    initialValue: doc,
+    initialVerson: serverVersion
+  }
+}
 
 ;(async () => {
-  for await (const value of stream.iter) {
-    console.log('isLocal', value.isLocal, 'value', value.doc)
+  const {patches, submitChange, initialValue} = await subscribeOT<Post[]>('http://localhost:2003/doc')
+
+  // Submit an operation adding a new entry.
+  const newEntry: Post = {title: 'hi', content: `${Math.random()}`.slice(2)}
+  const op = insertOp([initialValue.length], newEntry as any)
+  submitChange(op)
+
+  // And stream changes to the console.
+  for await (const data of patches) {
+    console.log(data.isLocal ? 'local op' : 'remote op', 'new value:', data.value)
   }
 })()
+
