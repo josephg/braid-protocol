@@ -158,6 +158,7 @@ export function stream(
         if (val.patchType && val.patchType !== lastPatchType) {
           patchHeaders['patch-type'] = lastPatchType = val.patchType
         }
+        if (val.patchId) patchHeaders['patch-id'] = val.patchId
 
         writeHeaders(res, patchHeaders)
         res.write(data)
