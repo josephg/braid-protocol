@@ -5,8 +5,7 @@
   "types": "dist/index.d.ts",
   "license": "MIT",
   "dependencies": {
-    "ministreamiterator": "^1.0.0",
-    "polka": "^0.5.2"
+    "ministreamiterator": "^1.0.0"
   },
   "scripts": {
     "dev": "tsc --watch --preserveWatchOutput",

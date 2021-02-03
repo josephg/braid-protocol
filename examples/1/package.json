@@ -1,7 +1,7 @@
 {
   "name": "example1",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "license": "MIT",
   "scripts": {
     "prepare": "browserify web/client.js -o web/bundle.js"
@@ -10,6 +10,7 @@
     "@josephg/braid-client": "*",
     "@josephg/braid-server": "*",
     "cors": "^2.8.5",
+    "polka": "^0.5.2",
     "sirv": "^1.0.11"
   },
   "devDependencies": {
