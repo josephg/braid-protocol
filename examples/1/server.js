@@ -1,6 +1,4 @@
 const polka = require('polka')
-const cors = require('cors')
-const fs = require('fs')
 const sirv = require('sirv')
 const braid = require('@josephg/braid-server')
 
@@ -9,12 +7,6 @@ const assets = sirv(__dirname + '/web')
 const getDate = () => new Date().toLocaleString() + '\n'
 
 polka()
-  .use(cors({ origin: true }))
-  .get('/', (req, res) => {
-    // Could use sirv or something but eh.
-    res.setHeader('content-type', 'text/html')
-    res.end(fs.readFileSync('test.html'))
-  })
   .get('/time', (req, res) => {
     let timer
 
