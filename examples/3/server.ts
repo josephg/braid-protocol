@@ -33,6 +33,8 @@ const applyPatch = (op: JSONOp, version: number, patchId: string | undefined) =>
     op
   })
 
+  console.log('applied change with id', patchId, 'doc is', doc)
+
   // And broadcast the operation to clients.
   for (const c of clients) {
     c.append({
@@ -68,7 +70,6 @@ app.put('/doc', bodyParser.json(), (req, res, next) => {
   parents = parents.trim()
   if (parents.startsWith('"')) parents = parents.slice(1, -1) // Trim off ""
 
-  console.log(req.headers)
   // The parents in this case will contain 1 item, a number, quoted like this: `Parents: "123"`
   const version = parseInt(parents)
   if (isNaN(version)) return next(Error('Invalid parents field'))
@@ -76,7 +77,6 @@ app.put('/doc', bodyParser.json(), (req, res, next) => {
   const op = req.body
   const opId = req.headers['patch-id']
 
-  console.log('got patch', req.body)
   applyPatch(op, version, opId as string | undefined)
 
   // The version header will be ignored. We don't care.

@@ -18,3 +18,26 @@ Compared to example 2, this adds some new Stuff:
 This example is currently a sketch - most of the logic here is hairy and
 extremely difficult to implement correctly. Application authors probably
 shouldn't be doing it! This code should / will be tucked into another library.
+
+## How to run this example
+
+Either compile and then run:
+
+```
+npx tsc # (Or npx tsc -w)
+node dist/server.js
+
+# and in another terminal
+node dist/client.js
+```
+
+Or use ts-node:
+
+```
+npx ts-node dist/server.js
+
+# and in another terminal
+npx ts-node dist/client.js
+```
+
+Each time you run the client it'll insert a new 'post' in the 'database'.
