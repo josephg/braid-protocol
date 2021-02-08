@@ -1,5 +1,6 @@
 const polka = require('polka')
 const sirv = require('sirv')
+const cors = require('cors')
 const braid = require('@josephg/braid-server')
 
 const assets = sirv(__dirname + '/web')
@@ -7,7 +8,8 @@ const assets = sirv(__dirname + '/web')
 const getDate = () => new Date().toLocaleString() + '\n'
 
 polka()
-  .get('/time', (req, res) => {
+  .options('/time', cors({methods: ['GET']}))
+  .get('/time', cors(), (req, res) => {
     let timer
 
     if (req.headers.subscribe === 'keep-alive') {
