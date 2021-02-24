@@ -1,0 +1,13 @@
+{
+  "name": "example2b",
+  "version": "1.0.0",
+  "main": "server.js",
+  "license": "MIT",
+  "dependencies": {
+    "@josephg/braid-client": "*",
+    "@josephg/braid-server": "*",
+    "polka": "^0.5.2",
+    "ot-fuzzer": "^1.3.0",
+    "ot-text-unicode": "^4.0.0"
+  }
+}
