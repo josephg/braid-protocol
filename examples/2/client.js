@@ -1,5 +1,5 @@
-const {subscribe} = require('@josephg/braid-client')
-const {type} = require('ot-text-unicode')
+const { subscribe } = require('@josephg/braid-client')
+const { type } = require('ot-text-unicode')
 
 const applyPatch = (prev, patchType, patch) => {
   if (patchType !== 'ot-text-unicode') throw Error('not supported patch type')
@@ -10,7 +10,7 @@ const applyPatch = (prev, patchType, patch) => {
 }
 
 ;(async () => {
-  const {stream} = await subscribe('http://localhost:2002/doc')
+  const { stream } = await subscribe('http://localhost:2002/doc')
   for await (const data of stream) {
     console.log(data.value)
   }

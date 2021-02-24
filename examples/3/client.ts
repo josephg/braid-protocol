@@ -1,26 +1,26 @@
-import {subscribeRaw} from '@josephg/braid-client'
-import {JSONOp, type as json1, insertOp, Doc} from 'ot-json1'
-import {Post} from './shared'
-import makeStream, {Stream} from 'ministreamiterator'
+import { subscribeRaw } from '@josephg/braid-client'
+import { JSONOp, type as json1, insertOp, Doc } from 'ot-json1'
+import { Post } from './shared'
+import makeStream, { Stream } from 'ministreamiterator'
 
 const decoder = new TextDecoder()
 
 interface StreamItem<T> {
-  value: T,
-  version: string,
-  op: JSONOp,
-  isLocal: boolean,
+  value: T
+  version: string
+  op: JSONOp
+  isLocal: boolean
 }
 
-const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => ([
+const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => [
   json1.transformNoConflict(op1, op2, 'left'),
   json1.transformNoConflict(op2, op1, 'right'),
-])
+]
 
 const subscribeOT = async <T>(url: string) => {
   const stream = makeStream<StreamItem<T>>()
 
-  const {streamHeaders, patches} = await subscribeRaw(url)
+  const { streamHeaders, patches } = await subscribeRaw(url)
   // console.log('stream headers', streamHeaders)
 
   // The first value should contain the document itself. For now I'm just
@@ -36,7 +36,7 @@ const subscribeOT = async <T>(url: string) => {
   // Operations waiting to be sent
   let pendingOp: JSONOp = null
   // Operations waiting to be acknowledged
-  let inflightOp: {op: JSONOp, id: string} | null = null
+  let inflightOp: { op: JSONOp; id: string } | null = null
 
   const processStream = async () => {
     let patchType = 'snapshot'
@@ -56,7 +56,8 @@ const subscribeOT = async <T>(url: string) => {
 
         // Transform the incoming operation by any operations queued up to be
         // sent in the client.
-        if (inflightOp != null) [inflightOp.op, op] = transformX(inflightOp.op, op)
+        if (inflightOp != null)
+          [inflightOp.op, op] = transformX(inflightOp.op, op)
         if (pendingOp != null) [pendingOp, op] = transformX(pendingOp, op)
 
         doc = json1.apply(doc as any, op) as any
@@ -65,7 +66,7 @@ const subscribeOT = async <T>(url: string) => {
           value: doc,
           version: serverVersion,
           op,
-          isLocal: false
+          isLocal: false,
         })
       }
     }
@@ -86,7 +87,7 @@ const subscribeOT = async <T>(url: string) => {
         'parents': serverVersion,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(inflightOp.op)
+      body: JSON.stringify(inflightOp.op),
     })
 
     console.log(await res.text())
@@ -104,7 +105,7 @@ const subscribeOT = async <T>(url: string) => {
     // Ok - set the pending operation in flight.
     inflightOp = {
       op: pendingOp,
-      id: `${Math.random()}`.slice(2)
+      id: `${Math.random()}`.slice(2),
     }
     pendingOp = null
     sendInflight()
@@ -128,21 +129,26 @@ const subscribeOT = async <T>(url: string) => {
     patches: stream.iter,
     submitChange,
     initialValue: doc,
-    initialVerson: serverVersion
+    initialVerson: serverVersion,
   }
 }
 
 ;(async () => {
-  const {patches, submitChange, initialValue} = await subscribeOT<Post[]>('http://localhost:2003/doc')
+  const { patches, submitChange, initialValue } = await subscribeOT<Post[]>(
+    'http://localhost:2003/doc'
+  )
 
   // Submit an operation adding a new entry.
-  const newEntry: Post = {title: 'hi', content: `${Math.random()}`.slice(2)}
+  const newEntry: Post = { title: 'hi', content: `${Math.random()}`.slice(2) }
   const op = insertOp([initialValue.length], newEntry as any)
   submitChange(op)
 
   // And stream changes to the console.
   for await (const data of patches) {
-    console.log(data.isLocal ? 'local op' : 'remote op', 'new value:', data.value)
+    console.log(
+      data.isLocal ? 'local op' : 'remote op',
+      'new value:',
+      data.value
+    )
   }
 })()
-

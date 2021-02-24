@@ -2,8 +2,8 @@ import { Stream } from 'ministreamiterator'
 import { StringLike } from './StringLike'
 
 export type Patch = {
-  data: StringLike;
-  range: string;
+  data: StringLike
+  range: string
 }
 export interface StateMessage {
   /**
@@ -12,9 +12,9 @@ export interface StateMessage {
   data?: StringLike // encoded patch
 
   /**
-   * 
+   *
    */
-  patches?: Array<Patch>;
+  patches?: Array<Patch>
 
   /**
    * Additional headers attached to this message when it is broadcast to clients
@@ -28,13 +28,13 @@ export interface StateMessage {
    * This may be assigned by the server or by a client, depending on how braid
    * is used.
    */
-  version?: string,
+  version?: string
 
   /**
    * Used for dedup and client matching when version is server-assigned. (Eg in
    * OT).
    */
-  patchId?: string,
+  patchId?: string
 
   /**
    * Note: Braid protocol doesn't currently have a "patch-type", but we're exp-

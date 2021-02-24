@@ -1,7 +1,10 @@
 import 'isomorphic-fetch'
-import {Readable} from 'stream'
+import { Readable } from 'stream'
 
-const splitOnce = (s: string, sep: string | RegExp): [string, string] | null => {
+const splitOnce = (
+  s: string,
+  sep: string | RegExp
+): [string, string] | null => {
   const pos = s.search(sep)
   if (pos < 0) return null
   else {
@@ -10,11 +13,9 @@ const splitOnce = (s: string, sep: string | RegExp): [string, string] | null => 
 
     // TODO: Why am I calling match twice, here and above? Fix to only do that
     // once.
-    const sepLen = typeof sep === 'string' ? sep.length : remainder.match(sep)![0].length
-    return [
-      s.slice(0, pos),
-      remainder.slice(sepLen)
-    ]
+    const sepLen =
+      typeof sep === 'string' ? sep.length : remainder.match(sep)![0].length
+    return [s.slice(0, pos), remainder.slice(sepLen)]
   }
 }
 
@@ -44,30 +45,29 @@ const searchHeaderGap = (buf: Uint8Array): null | [string, number] => {
 
   if (match == null) return null
   else {
-    return [
-      s.slice(0, match.index),
-      match.index! + match[0].length
-    ]
+    return [s.slice(0, match.index), match.index! + match[0].length]
   }
 }
 
 const decoder = new TextDecoder()
 
-async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
+async function* readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
   // Tiny state machine. We swap back and forth from reading the headers <->
   // reading data. Every chunk must contain a content-length field.
   const enum State {
-    Headers, Data
+    Headers,
+    Data,
   }
   let state = State.Headers
   let buffer = new Uint8Array() // never used.
   let headers: Record<string, string> | null = null
 
-  function *append(s: Uint8Array): Generator<PatchData> {
+  function* append(s: Uint8Array): Generator<PatchData> {
     // This is pretty inefficient, but its probably fine.
     buffer = concatBuffers(buffer, s)
 
-    while (true) { // Read as much as we can.
+    while (true) {
+      // Read as much as we can.
       if (state === State.Headers) {
         // Ok, so there's a problem here: We need to search for the
         // double-newline seperator between header and data. The header should
@@ -79,11 +79,13 @@ async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
         else {
           const [headerStr, dataOffset] = headerData
 
-          headers = Object.fromEntries(headerStr.split(/\r?\n/).map(entry => {
-            const kv = splitOnce(entry, ': ')
-            if (kv == null) throw Error('invalid HTTP header')
-            else return [kv[0].toLowerCase(), kv[1]]
-          }))
+          headers = Object.fromEntries(
+            headerStr.split(/\r?\n/).map((entry) => {
+              const kv = splitOnce(entry, ': ')
+              if (kv == null) throw Error('invalid HTTP header')
+              else return [kv[0].toLowerCase(), kv[1]]
+            })
+          )
 
           state = State.Data
           buffer = buffer.slice(dataOffset)
@@ -94,14 +96,14 @@ async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
         const contentLength = headers['content-length']
         if (contentLength == null) throw Error('missing content-length')
         const contentLengthNum = parseInt(contentLength)
-        if (isNaN(contentLengthNum) || contentLengthNum < 0) throw Error('invalid content-length')
+        if (isNaN(contentLengthNum) || contentLengthNum < 0)
+          throw Error('invalid content-length')
 
         if (buffer.length < contentLengthNum) break
         else {
-
           const data = buffer.slice(0, contentLengthNum)
           // console.log('got data', data)
-          yield {headers, data}
+          yield { headers, data }
           buffer = buffer.slice(contentLengthNum)
           headers = null
           state = State.Headers
@@ -114,7 +116,7 @@ async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
   // some reason. Instead it shows up as a nodejs stream.
   if (res.body && (res.body as any)[Symbol.asyncIterator] != null) {
     // We're in nodejs land, and the body is a nodejs stream object.
-    const body = res.body as any as Readable
+    const body = (res.body as any) as Readable
 
     // There's a bug where none of these events fire when the underlying TCP
     // connection disappears. Its fixed in node-fetch@next.
@@ -137,16 +139,18 @@ async function *readHTTPChunks(res: Response): AsyncGenerator<PatchData> {
         if (done) break
         yield* append(value!)
       }
-    } catch (e) { console.warn('Connection died', e) }
+    } catch (e) {
+      console.warn('Connection died', e)
+    }
   }
 }
 
 export interface SubscribeOptions {
-  reqHeaders?: Record<string, string>,
+  reqHeaders?: Record<string, string>
 }
 
 type PatchData = {
-  headers: Record<string, string>,
+  headers: Record<string, string>
   data: Uint8Array
 }
 
@@ -156,47 +160,48 @@ export async function subscribeRaw(url: string, opts: SubscribeOptions = {}) {
     headers: {
       'accept-patch': 'merge-object',
       'subscribe': 'keep-alive',
-      ...opts.reqHeaders
+      ...opts.reqHeaders,
     },
   })
 
   return {
     streamHeaders: Object.fromEntries(res.headers),
-    patches: readHTTPChunks(res)
+    patches: readHTTPChunks(res),
   }
 }
 
 export async function subscribe(url: string, opts: SubscribeOptions = {}) {
-  const { streamHeaders, patches: versionSections } = await subscribeRaw(url, opts)
+  const { streamHeaders, patches: versionSections } = await subscribeRaw(
+    url,
+    opts
+  )
   const contentType = streamHeaders['content-type']
   const currentVersions: string = streamHeaders['current-versions'] ?? null
 
-  async function *consumeVersions() {
+  async function* consumeVersions() {
     for await (const section of versionSections) {
       const value = defaultToDoc(contentType, section.data)
-      yield {value, version: section.headers['version'], section}
+      yield { value, version: section.headers['version'], section }
     }
   }
-  
+
   return {
     streamHeaders,
-    stream: consumeVersions()
+    stream: consumeVersions(),
   }
 }
 
-
-
 export interface StateClientOptions<T = any> {
-  toDoc?: (contentType: string, content: Uint8Array) => T,
-  applyPatch?: (prevValue: T, patchType: string, patch: Uint8Array) => T,
+  toDoc?: (contentType: string, content: Uint8Array) => T
+  applyPatch?: (prevValue: T, patchType: string, patch: Uint8Array) => T
 
   /**
    * If the client knows the value of the document at some specified version,
    * set knownDoc and knownAtVersion. The server can elide intervening
    * operations and just bring the client up to date.
    */
-  knownDoc?: T,
-  knownAtVersion?: string,
+  knownDoc?: T
+  knownAtVersion?: string
 
   /**
    * If knownAtVersion is behind the current server version, emit all
@@ -205,14 +210,16 @@ export interface StateClientOptions<T = any> {
    *
    * Has no effect if knownAtVersion is unset.
    */
-  emitAllPatches?: boolean,
+  emitAllPatches?: boolean
 }
 
 const defaultToDoc = (contentType: string, content: Uint8Array) => {
   // This is vastly incomplete and a compatibility nightmare.
-  return contentType.startsWith('text/') ? decoder.decode(content)
-  : contentType.startsWith('application/json') ? JSON.parse(decoder.decode(content))
-  : content
+  return contentType.startsWith('text/')
+    ? decoder.decode(content)
+    : contentType.startsWith('application/json')
+    ? JSON.parse(decoder.decode(content))
+    : content
 }
 
 // const merge = <T>(prevValue: T, patchType: string, patch: any, opts: StateClientOptions<any>): T => {
@@ -229,19 +236,22 @@ const defaultToDoc = (contentType: string, content: Uint8Array) => {
 //   }
 // }
 
-export async function subscribeApply(url: string, opts: StateClientOptions = {}) {
+export async function subscribeApply(
+  url: string,
+  opts: StateClientOptions = {}
+) {
   let value: any = opts.knownDoc
   let version: string | null = opts.knownAtVersion ?? null
 
   const reqHeaders: Record<string, string> = {}
   if (opts.knownAtVersion != null) reqHeaders['version'] = opts.knownAtVersion
 
-  const {streamHeaders, patches} = await subscribeRaw(url)
+  const { streamHeaders, patches } = await subscribeRaw(url)
   const contentType = streamHeaders['content-type']
   const upToDateVersion: string | null = streamHeaders['version'] ?? null
   let patchType = streamHeaders['patch-type'] || 'snapshot'
 
-  const apply = ({headers, data}: PatchData) => {
+  const apply = ({ headers, data }: PatchData) => {
     if (headers['patch-type']) patchType = headers['patch-type']
     if (headers['version']) version = headers['version']
 
@@ -249,7 +259,8 @@ export async function subscribeApply(url: string, opts: StateClientOptions = {})
       value = (opts.toDoc ?? defaultToDoc)(contentType, data)
       // return {value, headers}
     } else {
-      if (!opts.applyPatch) throw Error('Cannot patch documents without an apply function')
+      if (!opts.applyPatch)
+        throw Error('Cannot patch documents without an apply function')
       value = opts.applyPatch(value, patchType, data)
       // return {value, headers, patch: data}
     }
@@ -265,13 +276,16 @@ export async function subscribeApply(url: string, opts: StateClientOptions = {})
   // 3. We're behind. If opts.emitAllPatches then we emit immediately. Otherwise
   //    wait until we're up to date before emitting anything.
 
-  if (upToDateVersion == null) { // Case 2.
+  if (upToDateVersion == null) {
+    // Case 2.
     // Consume the first patch no matter what. It will usually be a snapshot.
     const patch = await patches.next()
     if (!patch.done) apply(patch.value)
-  } else { // Cases 1 and 3
+  } else {
+    // Cases 1 and 3
     if (!opts.emitAllPatches || version == null) {
-      while (version !== upToDateVersion) { // Case 3.
+      while (version !== upToDateVersion) {
+        // Case 3.
         const patch = await patches.next()
         if (patch.done) break
         apply(patch.value)
@@ -279,10 +293,10 @@ export async function subscribeApply(url: string, opts: StateClientOptions = {})
     }
   }
 
-  async function *consumePatches() {
+  async function* consumePatches() {
     for await (const patch of patches) {
       apply(patch)
-      yield {value, version, patch}
+      yield { value, version, patch }
     }
   }
 
@@ -290,6 +304,6 @@ export async function subscribeApply(url: string, opts: StateClientOptions = {})
     initialValue: value,
     initialVersion: version,
     streamHeaders,
-    stream: consumePatches()
+    stream: consumePatches(),
   }
 }
