@@ -166,6 +166,23 @@ export async function subscribeRaw(url: string, opts: SubscribeOptions = {}) {
   }
 }
 
+export async function subscribe(url: string, opts: SubscribeOptions = {}) {
+  const { streamHeaders, patches: versionSections } = await subscribeRaw(url, opts)
+  const contentType = streamHeaders['content-type']
+  const currentVersions: string = streamHeaders['current-versions'] ?? null
+
+  async function *consumeVersions() {
+    for await (const section of versionSections) {
+      const value = defaultToDoc(contentType, section.data)
+      yield {value, version: section.headers['version'], section}
+    }
+  }
+  
+  return {
+    streamHeaders,
+    stream: consumeVersions()
+  }
+}
 
 
 
@@ -212,7 +229,7 @@ const defaultToDoc = (contentType: string, content: Uint8Array) => {
 //   }
 // }
 
-export async function subscribe(url: string, opts: StateClientOptions = {}) {
+export async function subscribeApply(url: string, opts: StateClientOptions = {}) {
   let value: any = opts.knownDoc
   let version: string | null = opts.knownAtVersion ?? null
 

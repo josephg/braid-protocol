@@ -1,11 +1,7 @@
-const {subscribe} = require('@josephg/braid-client')
+const { subscribe } = require('@josephg/braid-client')
 
 ;(async () => {
-  const {initialValue, stream} = 
-    await subscribe('http://localhost:2002/doc', {
-      applyPatch: () => console.log('received patch')
-    })
-  console.log(initialValue)
+  const { stream } = await subscribe('http://localhost:2002/doc')
   for await (const data of stream) {
     console.log(data.value)
   }
