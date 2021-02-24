@@ -2,7 +2,10 @@ import asyncstream from 'ministreamiterator'
 import { ServerResponse } from 'http'
 import { StateMessage, BraidStream } from './BraidStream'
 import { StringLike } from './StringLike'
-import { toBuf, writeHeaders } from './utils'
+
+function toBuf(data: StringLike): Buffer {
+  return typeof data === 'string' ? Buffer.from(data, 'utf8') : data
+}
 
 interface StateServerOpts {
   /**
@@ -43,6 +46,12 @@ interface StateServerOpts {
 export interface MaybeFlushable {
   flush?: () => void
 }
+
+const headersToBuf = (headers: Record<string, string>) => (
+  Buffer.from(Object.entries(headers)
+    .map(([k, v]) => `${k}: ${v}\r\n`)
+    .join('') + '\r\n')
+)
 
 /*
 
@@ -160,8 +169,10 @@ export function stream(
         }
         if (val.patchId) patchHeaders['patch-id'] = val.patchId
 
-        writeHeaders(res, patchHeaders)
-        res.write(data)
+        res.write(Buffer.concat([
+          headersToBuf(patchHeaders),
+          data
+        ]))
         res.flush?.()
       }
     }
