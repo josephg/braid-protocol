@@ -20,13 +20,13 @@ const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => [
 const subscribeOT = async <T>(url: string) => {
   const stream = makeStream<StreamItem<T>>()
 
-  const { streamHeaders, patches } = await subscribeRaw(url)
+  const { streamHeaders, versions } = await subscribeRaw(url)
   // console.log('stream headers', streamHeaders)
 
   // The first value should contain the document itself. For now I'm just
   // hardcoding this - but this should deal correctly with known versions and
   // all that jazz.
-  const first = await patches.next()
+  const first = await versions.next()
   if (first.done) throw Error('No messages in stream')
 
   // console.log('first headers', first.value.headers)
@@ -40,7 +40,7 @@ const subscribeOT = async <T>(url: string) => {
 
   const processStream = async () => {
     let patchType = 'snapshot'
-    for await (const data of patches) {
+    for await (const data of versions) {
       const id = data.headers['patch-id']
       if (data.headers['patch-type']) patchType = data.headers['patch-type']
 
