@@ -82,11 +82,11 @@ function sendInitialValOnly(res: ServerResponse, opts: StateServerOpts): void {
     ...opts.httpHeaders,
   }
 
-  if (opts.contentType) httpHeaders['Content-Type'] = opts.contentType
-  if (opts.initialVerson) httpHeaders['Version'] = opts.initialVerson
+  if (opts.contentType) httpHeaders['content-type'] = opts.contentType
+  if (opts.initialVerson) httpHeaders['version'] = opts.initialVerson
 
   let bufData = toBuf(opts.initialValue)
-  httpHeaders['Content-Length'] = bufData.length
+  httpHeaders['content-length'] = bufData.length
 
   res.writeHead(200, 'OK', httpHeaders)
   res.end(bufData)
@@ -109,14 +109,14 @@ export function stream(
   }
 
   const httpHeaders: Record<string, string> = {
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+    'cache-control': 'no-cache',
+    'connection': 'keep-alive',
     ...opts.httpHeaders,
   }
 
   let contentType = opts.contentType ?? null
-  if (contentType != null) httpHeaders['Content-Type'] = contentType
-  if (opts.patchType) httpHeaders['Patch-Type'] = opts.patchType
+  if (contentType != null) httpHeaders['content-type'] = contentType
+  if (opts.patchType) httpHeaders['patch-type'] = opts.patchType
 
   res.writeHead(209, 'Subscription', httpHeaders)
 
@@ -158,12 +158,12 @@ export function stream(
         let versionHeaders: Record<string, string> = { ...val.headers }
 
         // Whether we have patches or just a version, include the version here
-        if (val.version) versionHeaders['Version'] = val.version
+        if (val.version) versionHeaders['version'] = val.version
 
         // Testing alternative braid protocol ideas here:
-        if (val.patchId) versionHeaders['Patch-Id'] = val.patchId
+        if (val.patchId) versionHeaders['patch-id'] = val.patchId
         if (val.patchType && val.patchType !== lastPatchType) {
-          versionHeaders['Patch-Type'] = lastPatchType = val.patchType
+          versionHeaders['patch-type'] = lastPatchType = val.patchType
         }
 
         if (val.patches && val.patches.length > 0) {
@@ -173,7 +173,7 @@ export function stream(
             const patchHeaders: Record<string, string> = {
               'content-length': `${data.length}`,
             }
-            if (range) patchHeaders['Content-Range'] = range
+            if (range) patchHeaders['content-range'] = range
 
             res.write(
               Buffer.concat([headersToBuf(versionHeaders), toBuf(data)])
@@ -182,7 +182,7 @@ export function stream(
         } else if (val.data) {
           const data = toBuf(val.data)
 
-          versionHeaders['Content-Length'] = `${data.length}`
+          versionHeaders['content-length'] = `${data.length}`
 
           res.write(Buffer.concat([headersToBuf(versionHeaders), data]))
         }
