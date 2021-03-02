@@ -155,19 +155,23 @@ export function stream(
       for await (const val of stream.iter) {
         if (!connected) break
 
-        let versionHeaders: Record<string, string> = { ...val.headers }
+        /**
+         * This is the "2nd tier" of headers, i.e. after the HTTP headers, there
+         * are "Update" headers, which can include a "Version:" header.
+         */
+        let updateHeaders: Record<string, string> = { ...val.headers }
 
         // Whether we have patches or just a version, include the version here
-        if (val.version) versionHeaders['version'] = val.version
+        if (val.version) updateHeaders['version'] = val.version
 
         // Testing alternative braid protocol ideas here:
-        if (val.patchId) versionHeaders['patch-id'] = val.patchId
+        if (val.patchId) updateHeaders['patch-id'] = val.patchId
         if (val.patchType && val.patchType !== lastPatchType) {
-          versionHeaders['patch-type'] = lastPatchType = val.patchType
+          updateHeaders['patch-type'] = lastPatchType = val.patchType
         }
 
         if (val.patches && val.patches.length > 0) {
-          versionHeaders['patches'] = `${val.patches.length}`
+          updateHeaders['patches'] = `${val.patches.length}`
 
           for (let { range, data } of val.patches) {
             const patchHeaders: Record<string, string> = {
@@ -175,16 +179,14 @@ export function stream(
             }
             if (range) patchHeaders['content-range'] = range
 
-            res.write(
-              Buffer.concat([headersToBuf(versionHeaders), toBuf(data)])
-            )
+            res.write(Buffer.concat([headersToBuf(updateHeaders), toBuf(data)]))
           }
         } else if (val.data) {
           const data = toBuf(val.data)
 
-          versionHeaders['content-length'] = `${data.length}`
+          updateHeaders['content-length'] = `${data.length}`
 
-          res.write(Buffer.concat([headersToBuf(versionHeaders), data]))
+          res.write(Buffer.concat([headersToBuf(updateHeaders), data]))
         }
         res.flush?.()
       }
