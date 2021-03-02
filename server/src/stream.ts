@@ -47,11 +47,12 @@ export interface MaybeFlushable {
   flush?: () => void
 }
 
-const headersToBuf = (headers: Record<string, string>) => (
-  Buffer.from(Object.entries(headers)
-    .map(([k, v]) => `${k}: ${v}\r\n`)
-    .join('') + '\r\n')
-)
+const headersToBuf = (headers: Record<string, string>) =>
+  Buffer.from(
+    Object.entries(headers)
+      .map(([k, v]) => `${k}: ${v}\r\n`)
+      .join('') + '\r\n'
+  )
 
 /*
 
@@ -153,26 +154,40 @@ export function stream(
 
       for await (const val of stream.iter) {
         if (!connected) break
-        // console.log('got val', val)
 
-        const data = toBuf(val.data)
+        /**
+         * This is the "2nd tier" of headers, i.e. after the HTTP headers, there
+         * are "Update" headers, which can include a "Version:" header.
+         */
+        let updateHeaders: Record<string, string> = { ...val.headers }
 
-        const patchHeaders: Record<string, string> = {
-          // 'content-type': 'application/json',
-          // 'patch-type': 'snapshot',
-          'content-length': `${data.length}`,
-          ...val.headers,
-        }
-        if (val.version) patchHeaders['version'] = val.version
+        // Whether we have patches or just a version, include the version here
+        if (val.version) updateHeaders['version'] = val.version
+
+        // Testing alternative braid protocol ideas here:
+        if (val.patchId) updateHeaders['patch-id'] = val.patchId
         if (val.patchType && val.patchType !== lastPatchType) {
-          patchHeaders['patch-type'] = lastPatchType = val.patchType
+          updateHeaders['patch-type'] = lastPatchType = val.patchType
         }
-        if (val.patchId) patchHeaders['patch-id'] = val.patchId
 
-        res.write(Buffer.concat([
-          headersToBuf(patchHeaders),
-          data
-        ]))
+        if (val.patches && val.patches.length > 0) {
+          updateHeaders['patches'] = `${val.patches.length}`
+
+          for (let { range, data } of val.patches) {
+            const patchHeaders: Record<string, string> = {
+              'content-length': `${data.length}`,
+            }
+            if (range) patchHeaders['content-range'] = range
+
+            res.write(Buffer.concat([headersToBuf(updateHeaders), toBuf(data)]))
+          }
+        } else if (val.data) {
+          const data = toBuf(val.data)
+
+          updateHeaders['content-length'] = `${data.length}`
+
+          res.write(Buffer.concat([headersToBuf(updateHeaders), data]))
+        }
         res.flush?.()
       }
     }

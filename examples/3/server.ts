@@ -1,22 +1,26 @@
 import polka from 'polka'
 import bodyParser from 'body-parser'
-import {stream, BraidStream} from '@josephg/braid-server'
-import {JSONOp, type as json1} from 'ot-json1'
-import {Post} from './shared'
+import { stream, BraidStream } from '@josephg/braid-server'
+import { JSONOp, type as json1 } from 'ot-json1'
+import { Post } from './shared'
 
 let doc: Post[] = []
 
 // The version is implied as the length of the history array.
 interface HistoryEntry {
-  id?: string, // Unique ID for dedup
-  op: JSONOp,
+  id?: string // Unique ID for dedup
+  op: JSONOp
 }
 let history: HistoryEntry[] = []
 
 // Set of clients to be updated.
 const clients = new Set<BraidStream>()
 
-const applyPatch = (op: JSONOp, version: number, patchId: string | undefined) => {
+const applyPatch = (
+  op: JSONOp,
+  version: number,
+  patchId: string | undefined
+) => {
   if (version > history.length) throw Error('Invalid version')
 
   while (version < history.length) {
@@ -30,7 +34,7 @@ const applyPatch = (op: JSONOp, version: number, patchId: string | undefined) =>
   doc = json1.apply(doc as any, op) as any
   history.push({
     id: patchId,
-    op
+    op,
   })
 
   console.log('applied change with id', patchId, 'doc is', doc)
@@ -63,10 +67,12 @@ app.get('/doc', (req, res) => {
 
 app.put('/doc', bodyParser.json(), (req, res, next) => {
   const patchType = req.headers['patch-type']
-  if (patchType !== json1.name) return next(Error('Missing or unsupported patch type'))
+  if (patchType !== json1.name)
+    return next(Error('Missing or unsupported patch type'))
 
   let parents = req.headers['parents']
-  if (parents == null || Array.isArray(parents)) return next(Error('Missing parents field'))
+  if (parents == null || Array.isArray(parents))
+    return next(Error('Missing parents field'))
   parents = parents.trim()
   if (parents.startsWith('"')) parents = parents.slice(1, -1) // Trim off ""
 
