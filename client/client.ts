@@ -248,6 +248,13 @@ export async function subscribeRaw(url: string, opts: SubscribeOptions = {}) {
   }
 }
 
+const defaultToDoc = (contentType: string, content: Uint8Array) => (
+  // This is vastly incomplete and a compatibility nightmare.
+  contentType.startsWith('text/') ? decoder.decode(content)
+  : contentType.startsWith('application/json') ? JSON.parse(decoder.decode(content))
+  : content
+)
+
 export async function subscribe(url: string, opts: SubscribeOptions = {}) {
   const { streamHeaders, versions } = await subscribeRaw(url, opts)
   const contentType = streamHeaders['content-type']
@@ -304,15 +311,6 @@ export interface StateClientOptions<T = any> {
   emitAllPatches?: boolean
 }
 
-const defaultToDoc = (contentType: string, content: Uint8Array) => {
-  // This is vastly incomplete and a compatibility nightmare.
-  return contentType.startsWith('text/')
-    ? decoder.decode(content)
-    : contentType.startsWith('application/json')
-    ? JSON.parse(decoder.decode(content))
-    : content
-}
-
 // const merge = <T>(prevValue: T, patchType: string, patch: any, opts: StateClientOptions<any>): T => {
 //   switch (patchType) {
 //     case 'snapshot': return patch
@@ -354,8 +352,9 @@ export async function subscribeApply(
       )
       // return {value, headers}
     } else {
-      if (!opts.applyPatch)
+      if (!opts.applyPatch) {
         throw Error('Cannot patch documents without an apply function')
+      }
       value = opts.applyPatch(value, patchType, data || new Uint8Array())
       // return {value, headers, patch: data}
     }
