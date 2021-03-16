@@ -1,3 +1,3 @@
 export { stream } from './stream'
-export { StateMessage, BraidStream } from './BraidStream'
+export { StateMessage, BraidStream } from './types'
 export { StringLike } from './StringLike'

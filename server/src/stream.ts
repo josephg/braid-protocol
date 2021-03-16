@@ -1,6 +1,6 @@
 import asyncstream from 'ministreamiterator'
 import { ServerResponse } from 'http'
-import { StateMessage, BraidStream } from './BraidStream'
+import { StateMessage, BraidStream } from './types'
 import { StringLike } from './StringLike'
 
 function toBuf(data: StringLike): Buffer {
@@ -20,7 +20,7 @@ interface StateServerOpts {
   /** The type of the referred content (content-type if you issued a GET on the resource) */
   contentType?: string
 
-  /** Defaults to snapshot - aka, each patch will contain a new copy of the data. */
+  /** Defaults to snapshot - aka, each update will contain a new copy of the data. */
   patchType?: 'snapshot' | 'merge-object' | string
   // encodePatch?: (patch: any) => string | Buffer,
 
