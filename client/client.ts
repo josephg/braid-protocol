@@ -49,24 +49,48 @@ const searchHeaderGap = (buf: Uint8Array): null | [string, number] => {
   }
 }
 
+type RawPatch = {
+  headers: Record<string, string>
+  data: Uint8Array
+}
+
+type RawSnapshotUpdate = {
+  type: 'snapshot',
+  headers: Record<string, string>
+  data: Uint8Array
+}
+
+type RawPatchUpdate = {
+  type: 'patch',
+  headers: Record<string, string>
+  patches: Array<RawPatch>
+}
+
+type RawUpdateData = RawSnapshotUpdate | RawPatchUpdate
+
+// Reused. (Why is this a stateful API?)
 const decoder = new TextDecoder()
 
-async function* readHTTPChunks(res: Response): AsyncGenerator<VersionData> {
+async function* readHTTPChunks(res: Response): AsyncGenerator<RawUpdateData> {
   // Medium-sized state machine. We swap back and forth from reading the headers <->
   // reading data. Every chunk must contain a content-length field. If we encounter
   // a Patches header, we count out the patches (each with headers & content) and return
   // them inside a version.
+
+  // An alternate implementation here could make another generator and
+  // lean on the compiler-generated generator's state machine.
+
   const enum State {
-    VersionHeaders,
-    VersionContent,
+    UpdateHeaders,
+    UpdateContent,
     PatchHeaders,
     PatchContent,
   }
-  let state = State.VersionHeaders
-  let buffer = new Uint8Array() // never used.
+  let state = State.UpdateHeaders
+  let buffer = new Uint8Array()
   let versionHeaders: Record<string, string> | null = null
   let patchHeaders: Record<string, string> | null = null
-  let patches: Array<Patch> = []
+  let patches: Array<RawPatch> = []
   let patchesCount: number = 0
 
   function getNextHeaders(): Record<string, string> | null {
@@ -93,14 +117,14 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<VersionData> {
     }
   }
 
-  function* append(s: Uint8Array): Generator<VersionData> {
+  function* append(s: Uint8Array): Generator<RawUpdateData> {
     // This is pretty inefficient, but it's probably fine.
     buffer = concatBuffers(buffer, s)
 
     while (true) {
       // console.log('while', state, buffer.length, asciiDecoder.decode(buffer))
       // Read as much as we can.
-      if (state == State.VersionHeaders) {
+      if (state == State.UpdateHeaders) {
         const nextHeaders = getNextHeaders()
         if (nextHeaders) {
           versionHeaders = nextHeaders
@@ -108,12 +132,12 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<VersionData> {
             patchesCount = parseInt(versionHeaders['patches'], 10)
             state = State.PatchHeaders
           } else {
-            state = State.VersionContent
+            state = State.UpdateContent
           }
         } else {
           break
         }
-      } else if (state == State.VersionContent) {
+      } else if (state == State.UpdateContent) {
         if (versionHeaders == null) throw Error('invalid state')
 
         const contentLength = versionHeaders['content-length']
@@ -125,10 +149,14 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<VersionData> {
           if (buffer.length < contentLengthNum) break
           else {
             const data = buffer.slice(0, contentLengthNum)
-            yield { headers: versionHeaders, data }
+            yield {
+              type: 'snapshot',
+              headers: versionHeaders,
+              data
+            }
             buffer = buffer.slice(contentLengthNum)
             versionHeaders = null
-            state = State.VersionHeaders
+            state = State.UpdateHeaders
           }
         } else {
           throw Error('Content-Length or Patches required')
@@ -168,8 +196,12 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<VersionData> {
             patchesCount--
 
             if (patchesCount == 0) {
-              yield { headers: versionHeaders, patches }
-              state = State.VersionHeaders
+              yield {
+                type: 'patch',
+                headers: versionHeaders,
+                patches
+              }
+              state = State.UpdateHeaders
               patches = []
               versionHeaders = null
               patchHeaders = null
@@ -218,22 +250,11 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<VersionData> {
   }
 }
 
-export interface SubscribeOptions {
+export interface RawSubscribeOpts {
   reqHeaders?: Record<string, string>
 }
 
-type Patch = {
-  headers: Record<string, string>
-  data: Uint8Array
-}
-
-type VersionData = {
-  headers: Record<string, string>
-  patches?: Array<Patch>
-  data?: Uint8Array
-}
-
-export async function subscribeRaw(url: string, opts: SubscribeOptions = {}) {
+export async function subscribeRaw(url: string, opts: RawSubscribeOpts = {}) {
   const res = await fetch(url, {
     // url,
     headers: {
@@ -244,61 +265,128 @@ export async function subscribeRaw(url: string, opts: SubscribeOptions = {}) {
 
   return {
     streamHeaders: Object.fromEntries(res.headers),
-    versions: readHTTPChunks(res),
+    updateStream: readHTTPChunks(res),
   }
 }
 
-const defaultToDoc = (contentType: string, content: Uint8Array) => (
+// ***** TODO: API boundary here.
+
+
+type PatchType = 'braid' | 'ot-json1' | 'ot-text-unicode' | string
+
+type ParsedPatch<Patch = any> = {
+  headers: Record<string, string>
+  type: string,
+  patch: Patch // TODO: patch? Data? Value? ???
+}
+
+type SnapshotUpdate<Doc = any> = {
+  type: 'snapshot',
+  headers: Record<string, string>
+  version: string | null,
+  contentType: string,
+  value: Doc // TODO: value or data?
+}
+
+type PatchUpdate<Patch = any> = {
+  type: 'patch',
+  headers: Record<string, string>
+  version: string | null,
+  patches: Array<ParsedPatch<Patch>>
+}
+
+type UpdateData<Doc = any, Patch = any> = SnapshotUpdate<Doc> | PatchUpdate<Patch>
+
+
+const defaultParseDoc = (contentType: string, content: Uint8Array): any => (
   // This is vastly incomplete and a compatibility nightmare.
   contentType.startsWith('text/') ? decoder.decode(content)
   : contentType.startsWith('application/json') ? JSON.parse(decoder.decode(content))
   : content
 )
 
-export async function subscribe(url: string, opts: SubscribeOptions = {}) {
-  const { streamHeaders, versions } = await subscribeRaw(url, opts)
-  const contentType = streamHeaders['content-type']
-  const currentVersions: string = streamHeaders['current-versions'] ?? null
+const defaultParsePatch = (patchType: string, headers: Record<string, string>, data: Uint8Array): any => (
+  // This is woefully wrong. Amongst other things, this needs to handle
+  // braid patches.
+  JSON.parse(decoder.decode(data))
+)
 
-  async function* consumeVersions() {
-    for await (const version of versions) {
-      if (version.data) {
-        const data = version.data
-        const value = defaultToDoc(contentType, data)
+interface SubscribeOpts<Doc = any, Patch = any> extends RawSubscribeOpts {
+  parseDoc?: (contentType: string, content: Uint8Array) => Doc
+  parsePatch?: (patchType: string, headers: Record<string, string>, content: Uint8Array) => Patch
+}
+
+/**
+ * This is a variant of subscribeRaw which (roughly) parses converts
+ * patch / snapshot based on the content-type header in the parent
+ * response. This may or may not actually be correct according to the
+ * protocol...
+ */
+export async function subscribe<Doc = any, Patch = any>(url: string, opts: SubscribeOpts<Doc, Patch> = {}) {
+  const { streamHeaders, updateStream } = await subscribeRaw(url, opts)
+  const contentType = streamHeaders['content-type']
+  // Assuming https://github.com/braid-org/braid-spec/issues/106 is accepted
+  const patchType = streamHeaders['patch-type']
+  const currentVersions: string = streamHeaders['current-versions'] ?? null
+  const parsePatch = opts.parsePatch ?? defaultParsePatch
+  const parseDoc = opts.parseDoc ?? defaultParseDoc
+
+  async function* consumeVersions(): AsyncGenerator<UpdateData<Doc, Patch>> {
+    for await (const update of updateStream) {
+      const {headers} = update
+      if (update.type === 'snapshot') {
+        const data = update.data
+        const value = parseDoc(contentType, data)
         yield {
+          type: 'snapshot',
+          headers,
+          version: headers['version'] ?? null,
+          contentType: contentType,
           value,
-          headers: version.headers,
         }
-      } else if (version.patches) {
-        const patches = version.patches.map((patch) => ({
-          headers: patch.headers,
-          value: defaultToDoc(contentType, patch.data),
-        }))
+      } else {
+        const patches = update.patches.map(patch => {
+          // patch-type header is defined in https://github.com/braid-org/braid-spec/issues/97 .
+          const localPatchType = patch.headers['content-type']
+            ?? patch.headers['patch-type']
+            ?? (patch.headers['content-range'] ? 'braid' : null)
+            ?? patchType
+            ?? 'unknown'
+
+          return {
+            headers: patch.headers,
+            type: localPatchType,
+            patch: parsePatch(contentType, patch.headers, patch.data),
+          } as ParsedPatch<Patch>
+        })
         yield {
+          type: 'patch',
+          headers,
+          version: headers['version'] ?? null,
           patches,
-          headers: version.headers,
         }
       }
     }
   }
 
   return {
-    currentVersions,
     streamHeaders,
-    stream: consumeVersions(),
+    currentVersions,
+    contentType,
+    updateStream: consumeVersions(),
   }
 }
 
-export interface StateClientOptions<T = any> {
-  toDoc?: (contentType: string, content: Uint8Array) => T
-  applyPatch?: (prevValue: T, patchType: string, patch: Uint8Array) => T
+export interface StateClientOptions<Doc = any> extends RawSubscribeOpts {
+  parseDoc?: (contentType: string, content: Uint8Array) => Doc
+  applyPatch?: (prevValue: Doc, patchType: string, patch: Uint8Array) => Doc
 
   /**
    * If the client knows the value of the document at some specified version,
    * set knownDoc and knownAtVersion. The server can elide intervening
    * operations and just bring the client up to date.
    */
-  knownDoc?: T
+  knownDoc?: Doc
   knownAtVersion?: string
 
   /**
@@ -308,7 +396,10 @@ export interface StateClientOptions<T = any> {
    *
    * Has no effect if knownAtVersion is unset.
    */
-  emitAllPatches?: boolean
+  emitAllPatches?: boolean,
+
+  /** Should the client automatically reconnect when disconnected? */
+  // reconnect?: boolean
 }
 
 // const merge = <T>(prevValue: T, patchType: string, patch: any, opts: StateClientOptions<any>): T => {
@@ -325,38 +416,51 @@ export interface StateClientOptions<T = any> {
 //   }
 // }
 
-export async function subscribeApply(
+
+/**
+ * This is a high level API for subscribe. It supports:
+ *
+ * - Tracking the state of the document over time
+ * - Reconnecting (well, it will)
+ * - Waiting for the initial document verion before returning
+ */
+export async function subscribeFancy<Doc = any>(
   url: string,
-  opts: StateClientOptions = {}
+  opts: StateClientOptions<Doc> = {}
 ) {
+  // type PatchBundle = {
+  //   patchType: string,
+  //   headers: Record<string, string>,
+  //   content: Uint8Array
+  // }
   let value: any = opts.knownDoc
   let version: string | null = opts.knownAtVersion ?? null
 
   const reqHeaders: Record<string, string> = {}
   if (opts.knownAtVersion != null) reqHeaders['version'] = opts.knownAtVersion
 
-  // probably need 'accept-patch': 'merge-object', here for backwards compat
-  const { streamHeaders, versions: patches } = await subscribeRaw(url)
-  const contentType = streamHeaders['content-type']
-  const upToDateVersion: string | null = streamHeaders['version'] ?? null
-  let patchType = streamHeaders['patch-type'] || 'snapshot'
+  const { streamHeaders, currentVersions, updateStream } = await subscribe(url, {
+    reqHeaders: opts.reqHeaders,
+    parseDoc: opts.parseDoc,
+    parsePatch: (patchType, headers, content) => content
+  })
+  // const contentType = streamHeaders['content-type']
+  // const upToDateVersion: string | null = streamHeaders['current-versions'] ?? null
+  // const patchType = streamHeaders['patch-type']
 
-  const apply = ({ headers, data }: VersionData) => {
-    if (headers['patch-type']) patchType = headers['patch-type']
-    if (headers['version']) version = headers['version']
+  const apply = (update: UpdateData<Doc, Uint8Array>) => {
+    if (update.version != null) version = update.version
 
-    if (patchType === 'snapshot') {
-      value = (opts.toDoc ?? defaultToDoc)(
-        contentType,
-        data || new Uint8Array()
-      )
-      // return {value, headers}
+    if (update.type === 'snapshot') {
+      value = update.value
     } else {
       if (!opts.applyPatch) {
         throw Error('Cannot patch documents without an apply function')
       }
-      value = opts.applyPatch(value, patchType, data || new Uint8Array())
-      // return {value, headers, patch: data}
+
+      for (const patch of update.patches) {
+        value = opts.applyPatch(value, patch.type, patch.patch)
+      }
     }
   }
 
@@ -364,33 +468,33 @@ export async function subscribeApply(
   // returning. There's three cases when this happens. Either:
   //
   // 1. The client already knows the value at the current version
-  //    (upToDateVersion === knownAtVersion).
+  //    (currentVersions === knownAtVersion).
   // 2. There is no known version. The first message from the server should have
   //    a snapshot. Return that.
   // 3. We're behind. If opts.emitAllPatches then we emit immediately. Otherwise
   //    wait until we're up to date before emitting anything.
 
-  if (upToDateVersion == null) {
+  if (currentVersions == null) {
     // Case 2.
     // Consume the first patch no matter what. It will usually be a snapshot.
-    const patch = await patches.next()
-    if (!patch.done) apply(patch.value)
+    const update = await updateStream.next()
+    if (!update.done) apply(update.value)
   } else {
     // Cases 1 and 3
     if (!opts.emitAllPatches || version == null) {
-      while (version !== upToDateVersion) {
+      while (version !== currentVersions) {
         // Case 3.
-        const patch = await patches.next()
-        if (patch.done) break
-        apply(patch.value)
+        const update = await updateStream.next()
+        if (update.done) break
+        apply(update.value)
       }
-    }
+    } // else case 1.
   }
 
   async function* consumePatches() {
-    for await (const patch of patches) {
-      apply(patch)
-      yield { value, version, patch }
+    for await (const update of updateStream) {
+      apply(update)
+      yield { value, version, update }
     }
   }
 
