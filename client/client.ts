@@ -126,92 +126,83 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<RawUpdateData> {
       // Read as much as we can.
       if (state == State.UpdateHeaders) {
         const nextHeaders = getNextHeaders()
-        if (nextHeaders) {
-          versionHeaders = nextHeaders
-          if (versionHeaders['patches']) {
-            patchesCount = parseInt(versionHeaders['patches'], 10)
-            state = State.PatchHeaders
-          } else {
-            state = State.UpdateContent
-          }
+        if (nextHeaders == null) break // need more bytes
+
+        versionHeaders = nextHeaders
+        if (versionHeaders['patches']) {
+          patchesCount = parseInt(versionHeaders['patches'], 10)
+          state = State.PatchHeaders
         } else {
-          break
+          state = State.UpdateContent
         }
       } else if (state == State.UpdateContent) {
         if (versionHeaders == null) throw Error('invalid state')
 
         const contentLength = versionHeaders['content-length']
-        if (contentLength != null) {
-          const contentLengthNum = parseInt(contentLength)
-          if (isNaN(contentLengthNum) || contentLengthNum < 0)
-            throw Error('invalid Content-Length')
+        if (contentLength == null) throw Error('Content-Length or Patches required')
 
-          if (buffer.length < contentLengthNum) break
-          else {
-            const data = buffer.slice(0, contentLengthNum)
-            yield {
-              type: 'snapshot',
-              headers: versionHeaders,
-              data
-            }
-            buffer = buffer.slice(contentLengthNum)
-            versionHeaders = null
-            state = State.UpdateHeaders
-          }
-        } else {
-          throw Error('Content-Length or Patches required')
+        const contentLengthNum = parseInt(contentLength)
+        if (isNaN(contentLengthNum) || contentLengthNum < 0) {
+          throw Error('invalid Content-Length')
         }
+
+        if (buffer.length < contentLengthNum) break // need more bytes
+
+        const data = buffer.slice(0, contentLengthNum)
+        yield {
+          type: 'snapshot',
+          headers: versionHeaders,
+          data
+        }
+        buffer = buffer.slice(contentLengthNum)
+        versionHeaders = null
+        state = State.UpdateHeaders
       } else if (state == State.PatchHeaders) {
         if (versionHeaders == null) throw Error('invalid state')
 
-        const nextHeaders = getNextHeaders()
-        if (nextHeaders) {
-          patchHeaders = nextHeaders
-        } else {
-          break
-        }
-
+        patchHeaders = getNextHeaders()
+        if (patchHeaders == null) break // need more bytes
         state = State.PatchContent
       } else if (state == State.PatchContent) {
         if (versionHeaders == null) throw Error('invalid state')
         if (patchHeaders == null) throw Error('invalid state')
 
         const contentLength = patchHeaders['content-length']
+        if (contentLength == null) {
+          throw Error('Patch is missing Content-Length header')
+        }
 
-        if (contentLength != null) {
-          const contentLengthNum = parseInt(contentLength)
-          if (isNaN(contentLengthNum) || contentLengthNum < 0)
-            throw Error('invalid Content-Length')
+        const contentLengthNum = parseInt(contentLength)
+        if (isNaN(contentLengthNum) || contentLengthNum < 0) {
+          throw Error('invalid Content-Length')
+        }
 
-          if (buffer.length < contentLengthNum) break
-          else {
-            const data = buffer.slice(0, contentLengthNum)
-            // We don't yield yet, because we need all the patches for this
-            // version together. Push onto array and send later.
-            patches.push({ headers: patchHeaders, data })
-            buffer = buffer.slice(contentLengthNum)
-            patchHeaders = null
+        if (buffer.length < contentLengthNum) break // more bytes plz
 
-            // One fewer patches in this version to process
-            patchesCount--
+        const data = buffer.slice(0, contentLengthNum)
 
-            if (patchesCount == 0) {
-              yield {
-                type: 'patch',
-                headers: versionHeaders,
-                patches
-              }
-              state = State.UpdateHeaders
-              patches = []
-              versionHeaders = null
-              patchHeaders = null
-            } else {
-              // Go back to processing next patch (or done)
-              state = State.PatchHeaders
-            }
+        // We don't yield yet, because we need all the patches for this
+        // version together. Push onto array and send later.
+        patches.push({ headers: patchHeaders, data })
+        buffer = buffer.slice(contentLengthNum)
+        patchHeaders = null
+
+        // One fewer patches in this version to process
+        patchesCount--
+
+        if (patchesCount == 0) {
+          yield {
+            type: 'patch',
+            headers: versionHeaders,
+            patches
           }
+          state = State.UpdateHeaders
+          patches = []
+          versionHeaders = null
+          patchHeaders = null
         } else {
-          throw Error('Content-Length or Patches required')
+          // Go back to processing next patch (or done)
+          state = State.PatchHeaders
         }
       }
     }
@@ -353,7 +344,7 @@ export async function subscribe<Doc = any, Patch = any>(url: string, opts: Subsc
             ?? patchType
             ?? 'unknown'
 
-          // console.log('got patch content', patch.data, decoder.decode(patch.data))
+          // console.log('got patch content', patch.data, `'${decoder.decode(patch.data)}'`)
           return {
             headers: patch.headers,
             type: localPatchType,
