@@ -1,17 +1,19 @@
 const { subscribe } = require('@josephg/braid-client')
 const { type } = require('ot-text-unicode')
 
-const applyPatch = (prev, patchType, patch) => {
-  if (patchType !== 'ot-text-unicode') throw Error('not supported patch type')
-
-  // console.log(new TextDecoder().decode(patch))
-  const op = JSON.parse(new TextDecoder().decode(patch))
-  return type.apply(prev, op)
-}
-
 ;(async () => {
+  let value = undefined
   const { updates } = await subscribe('http://localhost:2002/doc')
   for await (const data of updates) {
-    console.log(data.value)
+    if (data.type === 'snapshot') {
+      // Snapshot updates replace the current value
+      value = data.value
+    } else {
+      // Or with patches we apply all the patches we're given in sequence
+      for (const {patch} of data.patches) {
+        value = type.apply(value, patch)
+      }
+    }
+    console.log(value)
   }
 })()

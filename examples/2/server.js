@@ -10,7 +10,11 @@ const clients = new Set()
 // Every second update the document by modifying it with a patch.
 setInterval(() => {
   const [op, result] = genOp(doc)
+  // const [op, result] = [['👻'], '👻' + doc]
   doc = result
+
+  const j = JSON.stringify(op)
+  // console.log(j.length, j)
 
   for (const c of clients) {
     c.append({

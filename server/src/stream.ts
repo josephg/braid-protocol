@@ -204,8 +204,9 @@ export function stream(
               throw Error('Cannot infer type of patch inside update. Set patch.patchType, patch.range or connection-global opts.patchType.')
             }
 
+            let dataBuf = toBuf(data)
             const patchHeaders: Record<string, string> = {
-              'content-length': `${data.length}`,
+              'content-length': `${dataBuf.length}`,
             }
             if (range) patchHeaders['content-range'] = range
             if (type === 'braid') {
@@ -219,7 +220,7 @@ export function stream(
             }
 
             messages.push(headersToBuf(patchHeaders))
-            messages.push(toBuf(data))
+            messages.push(dataBuf)
           }
           res.write(Buffer.concat(messages))
 
