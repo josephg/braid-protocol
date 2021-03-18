@@ -10,8 +10,8 @@ const applyPatch = (prev, patchType, patch) => {
 }
 
 ;(async () => {
-  const { stream } = await subscribe('http://localhost:2002/doc')
-  for await (const data of stream) {
+  const { updates } = await subscribe('http://localhost:2002/doc')
+  for await (const data of updates) {
     console.log(data.value)
   }
 })()

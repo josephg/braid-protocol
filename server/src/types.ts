@@ -1,27 +1,12 @@
 import { Stream } from 'ministreamiterator'
-import { StringLike } from './StringLike'
 
-export type Patch = {
-  data: StringLike
-  range: string
-}
+export type StringOrBuf = string | Buffer | Uint8Array
 
-export interface StateMessage {
-  /**
-   * The string or buffer that we're sending to the client.
-   */
-  data?: StringLike // encoded patch
+// export function toBuf(data: StringLike): Buffer {
+//   return typeof data === 'string' ? Buffer.from(data, 'utf8') : data
+// }
 
-  /**
-   *
-   */
-  patches?: Array<Patch>
-
-  /**
-   * Additional headers attached to this message when it is broadcast to clients
-   */
-  headers?: { [k: string]: string | any }
-
+type CommonUpdate = {
   /**
    * Version of the operation. The version must be unique to all versions in
    * this stream.
@@ -33,15 +18,38 @@ export interface StateMessage {
 
   /**
    * Used for dedup and client matching when version is server-assigned. (Eg in
-   * OT).
+   * OT). Not in the spec.
    */
   patchId?: string
+
+  /**
+   * Additional headers attached to this message when it is broadcast to clients
+   */
+  headers?: { [k: string]: string | any }
+
 
   /**
    * Note: Braid protocol doesn't currently have a "patch-type", but we're exp-
    * erimenting with it here.
    */
-  patchType?: string // If missing, defaults to 'snapshot'.
 }
 
-export type BraidStream = Stream<StateMessage>
+export type SnapshotUpdate = CommonUpdate & {
+  /** The encoded contents of the new document snapshot */
+  value: StringOrBuf
+}
+
+export type Patch = {
+  /** Defaults to the patch type of the stream. At least one or the other must be set. */
+  patchType?: string
+  /** Used for braid patches. Implies patchType = 'braid' */
+  range?: string
+  data: StringOrBuf
+}
+
+export type PatchUpdate = CommonUpdate & {
+  patches: Array<Patch>
+}
+
+export type Update = SnapshotUpdate | PatchUpdate
+export type BraidStream = Stream<Update>

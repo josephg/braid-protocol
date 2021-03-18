@@ -22,7 +22,7 @@ polka()
       })
 
       timer = setInterval(() => {
-        stream.append({ data: getDate() })
+        stream.append({ value: getDate() })
       }, 1000)
     } else {
       res.end(getDate())

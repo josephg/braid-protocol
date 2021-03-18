@@ -1,11 +1,14 @@
 import asyncstream from 'ministreamiterator'
 import { ServerResponse } from 'http'
-import { StateMessage, BraidStream } from './types'
-import { StringLike } from './StringLike'
+import { Update, PatchUpdate, SnapshotUpdate, BraidStream, StringOrBuf, Patch } from './types'
 
-function toBuf(data: StringLike): Buffer {
-  return typeof data === 'string' ? Buffer.from(data, 'utf8') : data
-}
+const toBuf = (data: StringOrBuf): Buffer => (
+  // Actually Buffer.from(data, 'utf-8') would be fine here but
+  // typescript doesn't like it. Eh.
+  Buffer.isBuffer(data) ? data
+    : typeof data === 'string' ? Buffer.from(data, 'utf-8')
+    : Buffer.from(data)
+)
 
 interface StateServerOpts {
   /**
@@ -15,16 +18,21 @@ interface StateServerOpts {
   reqHeaders?: NodeJS.Dict<string | string[]>
 
   initialVerson?: string
-  initialValue?: StringLike
+  initialValue?: StringOrBuf
 
-  /** The type of the referred content (content-type if you issued a GET on the resource) */
+  /** HTTP content-type for the resource */
   contentType?: string
 
-  /** Defaults to snapshot - aka, each update will contain a new copy of the data. */
-  patchType?: 'snapshot' | 'merge-object' | string
+  /**
+   * Most servers will use a single patch type everywhere. See
+   * https://github.com/braid-org/braid-spec/issues/106
+   *
+   * If this is set, the patchType in each actual patch is assumed to be
+   * this value. For now this library will still send the patch type
+   * with every patch for compatibility.
+   */
+  patchType?: 'braid' | 'merge-object' | string
   // encodePatch?: (patch: any) => string | Buffer,
-
-  // patchMode: 'loose' | 'strict' // ???
 
   httpHeaders?: { [k: string]: string | any }
 
@@ -47,12 +55,13 @@ export interface MaybeFlushable {
   flush?: () => void
 }
 
-const headersToBuf = (headers: Record<string, string>) =>
+const headersToBuf = (headers: Record<string, string>) => (
   Buffer.from(
     Object.entries(headers)
       .map(([k, v]) => `${k}: ${v}\r\n`)
       .join('') + '\r\n'
   )
+)
 
 /*
 
@@ -94,6 +103,10 @@ function sendInitialValOnly(res: ServerResponse, opts: StateServerOpts): void {
   if (opts.onclose) process.nextTick(opts.onclose)
 }
 
+const updateIsSnapshot = (upd: Update): upd is SnapshotUpdate => (
+  (upd as any).patches === undefined
+)
+
 export function stream(
   res: ServerResponse & MaybeFlushable,
   opts: StateServerOpts = {}
@@ -116,13 +129,15 @@ export function stream(
 
   let contentType = opts.contentType ?? null
   if (contentType != null) httpHeaders['content-type'] = contentType
+
+  // As per https://github.com/braid-org/braid-spec/issues/106
   if (opts.patchType) httpHeaders['patch-type'] = opts.patchType
 
   res.writeHead(209, 'Subscription', httpHeaders)
 
   let connected = true
 
-  const stream = asyncstream<StateMessage>(() => {
+  const stream = asyncstream<SnapshotUpdate | PatchUpdate>(() => {
     connected = false
     res.end() // will fire res.emit('close') if not already closed
   })
@@ -133,60 +148,81 @@ export function stream(
     opts.onclose?.()
   })
 
-  // if (opts.heartbeatSecs !== null) {
-  //   ;(async () => {
-  //     // 30 second heartbeats to avoid timeouts
-  //     while (true) {
-  //       await new Promise(res => setTimeout(res, 30*1000))
+  if (opts.heartbeatSecs !== null) {
+    ;(async () => {
+      // 30 second heartbeats to avoid timeouts
+      while (true) {
+        await new Promise(res => setTimeout(res, 30*1000))
 
-  //       if (!connected) break
-
-  //       res.write(`:\n`);
-  //       // res.write(`event: heartbeat\ndata: \n\n`);
-  //       // res.write(`data: {}\n\n`)
-  //       res.flush?.()
-  //     }
-  //   })()
-  // }
-  ;(async () => {
-    if (connected) {
-      let lastPatchType = 'snapshot'
-
-      for await (const val of stream.iter) {
         if (!connected) break
 
-        /**
-         * This is the "2nd tier" of headers, i.e. after the HTTP headers, there
-         * are "Update" headers, which can include a "Version:" header.
-         */
-        let updateHeaders: Record<string, string> = { ...val.headers }
+        res.write(`:\n`);
+        // res.write(`event: heartbeat\ndata: \n\n`);
+        // res.write(`data: {}\n\n`)
+        res.flush?.()
+      }
+    })()
+  }
+
+  ;(async () => {
+    if (connected) {
+      let lastUpdateType = 'snapshot'
+
+      for await (const upd of stream.iter) {
+        if (!connected) break
+
+        // This is the "2nd tier" of headers, i.e. after the HTTP headers, there
+        // are "Update" headers, which can include a "Version:" header.
+        let updateHeaders: Record<string, string> = { ...upd.headers }
 
         // Whether we have patches or just a version, include the version here
-        if (val.version) updateHeaders['version'] = val.version
+        if (upd.version != null) updateHeaders['version'] = upd.version
 
-        // Testing alternative braid protocol ideas here:
-        if (val.patchId) updateHeaders['patch-id'] = val.patchId
-        if (val.patchType && val.patchType !== lastPatchType) {
-          updateHeaders['patch-type'] = lastPatchType = val.patchType
-        }
+        // This is not in the spec (yet).
+        if (upd.patchId != null) updateHeaders['patch-id'] = upd.patchId
 
-        if (val.patches && val.patches.length > 0) {
-          updateHeaders['patches'] = `${val.patches.length}`
+        if (updateIsSnapshot(upd)) {
+          const data = toBuf(upd.value)
+          updateHeaders['content-length'] = `${data.length}`
+          res.write(Buffer.concat([headersToBuf(updateHeaders), data]))
+        } else {
+          // Sending a set of patches
+          updateHeaders['patches'] = `${upd.patches.length}`
 
-          for (let { range, data } of val.patches) {
+          // I'm building up a list of message buffers and I'll send
+          // them in one res.write() call to cut down on the number of
+          // transfer-encoding chunks being sent. This might slightly
+          // lower performance - I'm not sure if that matters here.
+          const messages = [headersToBuf(updateHeaders)]
+
+          for (const { patchType, range, data } of upd.patches) {
+            const type = patchType
+              ?? (range != null ? 'braid' : null)
+              ?? opts.patchType
+
+            if (type == null) {
+              throw Error('Cannot infer type of patch inside update. Set patch.patchType, patch.range or connection-global opts.patchType.')
+            }
+
             const patchHeaders: Record<string, string> = {
               'content-length': `${data.length}`,
             }
             if (range) patchHeaders['content-range'] = range
+            if (type === 'braid') {
+              if (range == null) throw Error('Invalid braid patch - expected range header')
+              patchHeaders['content-range'] = range
+            } else {
+              // TODO: Remove this after issue #106 resolves when the
+              // patch is set globally. Also note this will probably be
+              // renamed to patch-type in a future version of the spec.
+              patchHeaders['content-type'] = type
+            }
 
-            res.write(Buffer.concat([headersToBuf(updateHeaders), toBuf(data)]))
+            messages.push(headersToBuf(patchHeaders))
+            messages.push(toBuf(data))
           }
-        } else if (val.data) {
-          const data = toBuf(val.data)
+          res.write(Buffer.concat(messages))
 
-          updateHeaders['content-length'] = `${data.length}`
-
-          res.write(Buffer.concat([headersToBuf(updateHeaders), data]))
         }
         res.flush?.()
       }
@@ -195,7 +231,7 @@ export function stream(
 
   if (opts.initialValue !== undefined) {
     stream.append({
-      data: opts.initialValue,
+      value: opts.initialValue,
       version: opts.initialVerson,
     })
   }

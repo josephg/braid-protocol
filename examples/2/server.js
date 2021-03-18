@@ -14,8 +14,9 @@ setInterval(() => {
 
   for (const c of clients) {
     c.append({
-      patchType: 'ot-text-unicode',
-      data: JSON.stringify(op) + '\n',
+      patches: [{
+        data: JSON.stringify(op) + '\n',
+      }]
     })
   }
 }, 1000)
@@ -25,6 +26,7 @@ polka()
     const stream = braid.stream(res, {
       reqHeaders: req.headers,
       initialValue: doc + '\n',
+      patchType: 'ot-text-unicode',
       contentType: 'text/plain',
       onclose() {
         if (stream) clients.delete(stream)

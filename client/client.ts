@@ -265,18 +265,18 @@ export async function subscribeRaw(url: string, opts: RawSubscribeOpts = {}) {
 
   return {
     streamHeaders: Object.fromEntries(res.headers),
-    updateStream: readHTTPChunks(res),
+    updates: readHTTPChunks(res),
   }
 }
 
 // ***** TODO: API boundary here.
 
-
+// A string, with autocomplete.
 type PatchType = 'braid' | 'ot-json1' | 'ot-text-unicode' | string
 
 type ParsedPatch<Patch = any> = {
   headers: Record<string, string>
-  type: string,
+  type: PatchType,
   patch: Patch // TODO: patch? Data? Value? ???
 }
 
@@ -323,7 +323,7 @@ interface SubscribeOpts<Doc = any, Patch = any> extends RawSubscribeOpts {
  * protocol...
  */
 export async function subscribe<Doc = any, Patch = any>(url: string, opts: SubscribeOpts<Doc, Patch> = {}) {
-  const { streamHeaders, updateStream } = await subscribeRaw(url, opts)
+  const { streamHeaders, updates: updateStream } = await subscribeRaw(url, opts)
   const contentType = streamHeaders['content-type']
   // Assuming https://github.com/braid-org/braid-spec/issues/106 is accepted
   const patchType = streamHeaders['patch-type']
@@ -353,6 +353,7 @@ export async function subscribe<Doc = any, Patch = any>(url: string, opts: Subsc
             ?? patchType
             ?? 'unknown'
 
+          // console.log('got patch content', patch.data, decoder.decode(patch.data))
           return {
             headers: patch.headers,
             type: localPatchType,
@@ -373,7 +374,7 @@ export async function subscribe<Doc = any, Patch = any>(url: string, opts: Subsc
     streamHeaders,
     currentVersions,
     contentType,
-    updateStream: consumeVersions(),
+    updates: consumeVersions(),
   }
 }
 
@@ -439,7 +440,7 @@ export async function subscribeFancy<Doc = any>(
   const reqHeaders: Record<string, string> = {}
   if (opts.knownAtVersion != null) reqHeaders['version'] = opts.knownAtVersion
 
-  const { streamHeaders, currentVersions, updateStream } = await subscribe(url, {
+  const { streamHeaders, currentVersions, updates: updateStream } = await subscribe(url, {
     reqHeaders: opts.reqHeaders,
     parseDoc: opts.parseDoc,
     parsePatch: (patchType, headers, content) => content
@@ -502,6 +503,6 @@ export async function subscribeFancy<Doc = any>(
     initialValue: value,
     initialVersion: version,
     streamHeaders,
-    stream: consumePatches(),
+    updates: consumePatches(),
   }
 }
