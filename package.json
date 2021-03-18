@@ -4,5 +4,8 @@
     "client",
     "server",
     "examples/*"
-  ]
+  ],
+  "scripts": {
+    "prepare": "yarn workspaces run prepare"
+  }
 }
