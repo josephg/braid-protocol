@@ -2,6 +2,8 @@ import asyncstream from 'ministreamiterator'
 import { ServerResponse } from 'http'
 import { Update, PatchUpdate, SnapshotUpdate, BraidStream, StringOrBuf, Patch } from './types'
 
+const DEFAULT_HEARTBEAT_SECS = 30
+
 const toBuf = (data: StringOrBuf): Buffer => (
   // Actually Buffer.from(data, 'utf-8') would be fine here but
   // typescript doesn't like it. Eh.
@@ -155,10 +157,11 @@ export function stream(
   })
 
   if (opts.heartbeatSecs !== null) {
+    const heartbeatSecs = opts.heartbeatSecs ?? DEFAULT_HEARTBEAT_SECS
     ;(async () => {
       // 30 second heartbeats to avoid timeouts
       while (true) {
-        await new Promise(res => setTimeout(res, 30*1000))
+        await new Promise(res => setTimeout(res, heartbeatSecs * 1000))
 
         if (!connected) break
 
@@ -172,8 +175,6 @@ export function stream(
 
   ;(async () => {
     if (connected) {
-      let lastUpdateType = 'snapshot'
-
       for await (const upd of stream.iter) {
         if (!connected) break
 
