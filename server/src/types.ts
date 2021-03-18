@@ -48,7 +48,10 @@ export type Patch = {
 }
 
 export type PatchUpdate = CommonUpdate & {
-  patches: Array<Patch>
+  // The patches can just be specified as strings / buffers instead of
+  // full patch objects, if the patch type is specified at the top
+  // level.
+  patches: Array<Patch | StringOrBuf>
 }
 
 export type Update = SnapshotUpdate | PatchUpdate

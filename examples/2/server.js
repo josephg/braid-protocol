@@ -18,9 +18,7 @@ setInterval(() => {
 
   for (const c of clients) {
     c.append({
-      patches: [{
-        data: JSON.stringify(op) + '\n',
-      }]
+      patches: [JSON.stringify(op) + '\n']
     })
   }
 }, 1000)

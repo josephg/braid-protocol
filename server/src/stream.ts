@@ -10,6 +10,12 @@ const toBuf = (data: StringOrBuf): Buffer => (
     : Buffer.from(data)
 )
 
+const isStringOrBuf = (val: any): val is StringOrBuf => (
+  typeof val === 'string'
+    || Buffer.isBuffer(val)
+    || val instanceof Uint8Array
+)
+
 interface StateServerOpts {
   /**
    * Optional headers from request, so we can parse out requested patch type
@@ -195,7 +201,13 @@ export function stream(
           // lower performance - I'm not sure if that matters here.
           const messages = [headersToBuf(updateHeaders)]
 
-          for (const { patchType, range, data } of upd.patches) {
+          for (let patch of upd.patches) {
+            // This is a bit gross. We allow patches to be specified as
+            // using their raw buffer / string instead of needing to be
+            // wrapped. This is simple but allocation-inefficient.
+            if (isStringOrBuf(patch)) patch = {data: patch}
+            const {patchType, range, data} = patch
+
             const type = patchType
               ?? (range != null ? 'braid' : null)
               ?? opts.patchType
