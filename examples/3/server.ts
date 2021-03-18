@@ -42,10 +42,11 @@ const applyPatch = (
   // And broadcast the operation to clients.
   for (const c of clients) {
     c.append({
-      patchType: json1.name,
       patchId,
       version: `${version}`,
-      data: JSON.stringify(op) + '\n',
+      patches: [
+        JSON.stringify(op) + '\n',
+      ]
     })
   }
 }
@@ -58,6 +59,7 @@ app.get('/doc', (req, res) => {
     initialValue: JSON.stringify(doc, null, 2) + '\n',
     initialVerson: `${history.length}`,
     contentType: 'application/json',
+    patchType: json1.name,
     onclose() {
       if (s) clients.delete(s)
     },
@@ -65,6 +67,8 @@ app.get('/doc', (req, res) => {
   if (s) clients.add(s)
 })
 
+// You can test this with curl:
+// curl -XPUT -H'parents: 0' -H'patch-type: json1' -H'content-type: application/json' -d '[0,{"i":5}]' localhost:2003/doc
 app.put('/doc', bodyParser.json(), (req, res, next) => {
   const patchType = req.headers['patch-type']
   if (patchType !== json1.name)
@@ -83,7 +87,11 @@ app.put('/doc', bodyParser.json(), (req, res, next) => {
   const op = req.body
   const opId = req.headers['patch-id']
 
-  applyPatch(op, version, opId as string | undefined)
+  console.log('Received operation', op, 'id:', opId)
+
+  try {
+    applyPatch(op, version, opId as string | undefined)
+  } catch (e) { next(e) }
 
   // The version header will be ignored. We don't care.
   res.end()

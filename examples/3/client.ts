@@ -20,16 +20,17 @@ const transformX = (op1: JSONOp, op2: JSONOp): [JSONOp, JSONOp] => [
 const subscribeOT = async <T>(url: string) => {
   const stream = makeStream<StreamItem<T>>()
 
-  const { streamHeaders, versions } = await subscribeRaw(url)
+  const { streamHeaders, updates } = await subscribeRaw(url)
   // console.log('stream headers', streamHeaders)
 
   // The first value should contain the document itself. For now I'm just
   // hardcoding this - but this should deal correctly with known versions and
   // all that jazz.
-  const first = await versions.next()
+  const first = await updates.next()
   if (first.done) throw Error('No messages in stream')
 
   // console.log('first headers', first.value.headers)
+  if (first.value.type !== 'snapshot') throw Error('Expected subscription to start with a snapshot')
   let doc: T = JSON.parse(decoder.decode(first.value.data))
   let serverVersion = first.value.headers['version']
 
@@ -39,10 +40,8 @@ const subscribeOT = async <T>(url: string) => {
   let inflightOp: { op: JSONOp; id: string } | null = null
 
   const processStream = async () => {
-    let patchType = 'snapshot'
-    for await (const data of versions) {
+    for await (const data of updates) {
       const id = data.headers['patch-id']
-      if (data.headers['patch-type']) patchType = data.headers['patch-type']
 
       if (inflightOp != null && id === inflightOp.id) {
         // Operation confirmed!
@@ -50,24 +49,43 @@ const subscribeOT = async <T>(url: string) => {
         flushPending()
       } else {
         serverVersion = data.headers['version']
-        if (patchType !== json1.name) throw Error('unsupported patch type')
 
-        let op = JSON.parse(decoder.decode(data.data)) as JSONOp
+        if (data.type === 'snapshot') {
+          // Snapshot updates replace the contents of the document. Only
+          // the first message in the subscription will be a snapshot
+          // update here - though we may get them when reconnecting if
+          // the server doesn't have context to catch up.
 
-        // Transform the incoming operation by any operations queued up to be
-        // sent in the client.
-        if (inflightOp != null)
-          [inflightOp.op, op] = transformX(inflightOp.op, op)
-        if (pendingOp != null) [pendingOp, op] = transformX(pendingOp, op)
+          // I'd implement it by replacing doc with the new value, but
+          // we would also need to discard pending / inflight ops and
+          // thats tricky.
+          throw Error('Snapshot update inside the stream not supported')
+        } else {
+          // We'll only get one patch per message anyway, but eh.
+          for (const {headers, data: patch} of data.patches) {
+            const patchType = headers['content-type']
+              ?? headers['patch-type']
+              ?? streamHeaders['patch-type']
+            if (patchType !== json1.name) throw Error('unsupported patch type')
 
-        doc = json1.apply(doc as any, op) as any
+            let op = JSON.parse(decoder.decode(patch)) as JSONOp
 
-        stream.append({
-          value: doc,
-          version: serverVersion,
-          op,
-          isLocal: false,
-        })
+            // Transform the incoming operation by any operations queued up to be
+            // sent in the client.
+            if (inflightOp != null)
+              [inflightOp.op, op] = transformX(inflightOp.op, op)
+            if (pendingOp != null) [pendingOp, op] = transformX(pendingOp, op)
+
+            doc = json1.apply(doc as any, op) as any
+
+            stream.append({
+              value: doc,
+              version: serverVersion,
+              op,
+              isLocal: false,
+            })
+          }
+        }
       }
     }
   }
@@ -138,6 +156,8 @@ const subscribeOT = async <T>(url: string) => {
     'http://localhost:2003/doc'
   )
 
+  console.log('Connected. Initial document value', initialValue)
+
   // Submit an operation adding a new entry.
   const newEntry: Post = { title: 'hi', content: `${Math.random()}`.slice(2) }
   const op = insertOp([initialValue.length], newEntry as any)
@@ -145,10 +165,6 @@ const subscribeOT = async <T>(url: string) => {
 
   // And stream changes to the console.
   for await (const data of patches) {
-    console.log(
-      data.isLocal ? 'local op' : 'remote op',
-      'new value:',
-      data.value
-    )
+    console.log(data.isLocal ? 'Got local' : 'Got remote', 'op. New value:', data.value)
   }
 })()
