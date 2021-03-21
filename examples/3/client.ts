@@ -31,7 +31,7 @@ const subscribeOT = async <T>(url: string) => {
 
   // console.log('first headers', first.value.headers)
   if (first.value.type !== 'snapshot') throw Error('Expected subscription to start with a snapshot')
-  let doc: T = JSON.parse(decoder.decode(first.value.data))
+  let doc: T = JSON.parse(decoder.decode(first.value.value))
   let serverVersion = first.value.headers['version']
 
   // Operations waiting to be sent
@@ -62,13 +62,13 @@ const subscribeOT = async <T>(url: string) => {
           throw Error('Snapshot update inside the stream not supported')
         } else {
           // We'll only get one patch per message anyway, but eh.
-          for (const {headers, data: patch} of data.patches) {
+          for (const {headers, body} of data.patches) {
             const patchType = headers['content-type']
               ?? headers['patch-type']
               ?? streamHeaders['patch-type']
             if (patchType !== json1.name) throw Error('unsupported patch type')
 
-            let op = JSON.parse(decoder.decode(patch)) as JSONOp
+            let op = JSON.parse(decoder.decode(body)) as JSONOp
 
             // Transform the incoming operation by any operations queued up to be
             // sent in the client.

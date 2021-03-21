@@ -12,12 +12,10 @@ setInterval(() => {
   doc.push(item)
   for (const c of clients) {
     c.append({
-      patches: [
-        {
-          range: '[-0:-0]',
-          data: JSON.stringify(item) + '\n',
-        },
-      ],
+      patches: [{
+        range: '[-0:-0]',
+        body: JSON.stringify(item) + '\n',
+      }],
     })
   }
 }, 1000)

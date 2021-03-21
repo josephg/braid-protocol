@@ -39,7 +39,7 @@ export type Patch = {
   patchType?: string
   /** Used for braid patches. Implies patchType = 'braid' */
   range?: string
-  data: StringOrBuf
+  body: StringOrBuf
 }
 
 export type PatchUpdate = CommonUpdate & {

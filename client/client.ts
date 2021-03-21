@@ -1,3 +1,4 @@
+import { RawPatch, RawUpdateData, Patch, UpdateData } from './types'
 import 'isomorphic-fetch'
 import { Readable } from 'stream'
 
@@ -54,24 +55,6 @@ const searchHeaderGap = (buf: Uint8Array): null | [string, number] => {
   }
 }
 
-type RawPatch = {
-  headers: Record<string, string>
-  data: Uint8Array
-}
-
-type RawSnapshotUpdate = {
-  type: 'snapshot',
-  headers: Record<string, string>
-  data: Uint8Array
-}
-
-type RawPatchUpdate = {
-  type: 'patch',
-  headers: Record<string, string>
-  patches: Array<RawPatch>
-}
-
-type RawUpdateData = RawSnapshotUpdate | RawPatchUpdate
 
 // Reused. (Why is this a stateful API?)
 const decoder = new TextDecoder()
@@ -196,11 +179,11 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<RawUpdateData> {
 
           if (buffer.length < contentLengthNum) break loop // need more bytes
 
-          const data = buffer.slice(0, contentLengthNum)
+          const value = buffer.slice(0, contentLengthNum)
           yield {
             type: 'snapshot',
             headers: versionHeaders,
-            data
+            value
           }
           buffer = buffer.slice(contentLengthNum)
           versionHeaders = null
@@ -235,11 +218,11 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<RawUpdateData> {
 
           if (buffer.length < contentLengthNum) break loop // more bytes plz
 
-          const data = buffer.slice(0, contentLengthNum)
+          const body = buffer.slice(0, contentLengthNum)
 
           // We don't yield yet, because we need all the patches for this
           // version together. Push onto array and send later.
-          patches.push({ headers: patchHeaders, data })
+          patches.push({ headers: patchHeaders, body })
           buffer = buffer.slice(contentLengthNum)
           patchHeaders = null
 
@@ -321,32 +304,6 @@ export async function subscribeRaw(url: string, opts: RawSubscribeOpts = {}) {
 
 // ***** TODO: API boundary here.
 
-// A string, with autocomplete.
-type PatchType = 'braid' | 'ot-json1' | 'ot-text-unicode' | string
-
-type ParsedPatch<Patch = any> = {
-  headers: Record<string, string>
-  type: PatchType,
-  patch: Patch // TODO: patch? Data? Value? ???
-}
-
-type SnapshotUpdate<Doc = any> = {
-  type: 'snapshot',
-  headers: Record<string, string>
-  version: string | null,
-  contentType: string,
-  value: Doc // TODO: value or data?
-}
-
-type PatchUpdate<Patch = any> = {
-  type: 'patch',
-  headers: Record<string, string>
-  version: string | null,
-  patches: Array<ParsedPatch<Patch>>
-}
-
-type UpdateData<Doc = any, Patch = any> = SnapshotUpdate<Doc> | PatchUpdate<Patch>
-
 
 const defaultParseDoc = (contentType: string, content: Uint8Array): any => (
   // This is vastly incomplete and a compatibility nightmare.
@@ -372,7 +329,7 @@ interface SubscribeOpts<Doc = any, Patch = any> extends RawSubscribeOpts {
  * response. This may or may not actually be correct according to the
  * protocol...
  */
-export async function subscribe<Doc = any, Patch = any>(url: string, opts: SubscribeOpts<Doc, Patch> = {}) {
+export async function subscribe<Doc = any, P = any>(url: string, opts: SubscribeOpts<Doc, P> = {}) {
   const { streamHeaders, updates: updateStream } = await subscribeRaw(url, opts)
   const contentType = streamHeaders['content-type']
   // Assuming https://github.com/braid-org/braid-spec/issues/106 is accepted
@@ -381,12 +338,11 @@ export async function subscribe<Doc = any, Patch = any>(url: string, opts: Subsc
   const parsePatch = opts.parsePatch ?? defaultParsePatch
   const parseDoc = opts.parseDoc ?? defaultParseDoc
 
-  async function* consumeVersions(): AsyncGenerator<UpdateData<Doc, Patch>> {
+  async function* consumeVersions(): AsyncGenerator<UpdateData<Doc, P>> {
     for await (const update of updateStream) {
       const {headers} = update
       if (update.type === 'snapshot') {
-        const data = update.data
-        const value = parseDoc(contentType, data)
+        const value = parseDoc(contentType, update.value)
         yield {
           type: 'snapshot',
           headers,
@@ -397,18 +353,20 @@ export async function subscribe<Doc = any, Patch = any>(url: string, opts: Subsc
       } else {
         const patches = update.patches.map(patch => {
           // patch-type header is defined in https://github.com/braid-org/braid-spec/issues/97 .
+          const range = patch.headers['content-range'] as string | undefined
           const localPatchType = patch.headers['content-type']
             ?? patch.headers['patch-type']
-            ?? (patch.headers['content-range'] ? 'braid' : null)
+            ?? (range != null ? 'braid' : null)
             ?? patchType
             ?? 'unknown'
 
           // console.log('got patch content', patch.data, `'${decoder.decode(patch.data)}'`)
           return {
             headers: patch.headers,
-            type: localPatchType,
-            patch: parsePatch(contentType, patch.headers, patch.data),
-          } as ParsedPatch<Patch>
+            patchType: localPatchType,
+            range,
+            body: parsePatch(contentType, patch.headers, patch.body),
+          } as Patch<P>
         })
         yield {
           type: 'patch',
@@ -510,7 +468,7 @@ export async function subscribeFancy<Doc = any>(
       }
 
       for (const patch of update.patches) {
-        value = opts.applyPatch(value, patch.type, patch.patch)
+        value = opts.applyPatch(value, patch.patchType, patch.body)
       }
     }
   }

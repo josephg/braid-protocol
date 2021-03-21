@@ -10,8 +10,8 @@ const { type } = require('ot-text-unicode')
       value = data.value
     } else {
       // Or with patches we apply all the patches we're given in sequence
-      for (const {patch} of data.patches) {
-        value = type.apply(value, patch)
+      for (const {body} of data.patches) {
+        value = type.apply(value, body)
       }
     }
     console.log(value)

@@ -189,9 +189,9 @@ export function stream(
         if (upd.patchId != null) updateHeaders['patch-id'] = upd.patchId
 
         if (updateIsSnapshot(upd)) {
-          const data = toBuf(upd.value)
-          updateHeaders['content-length'] = `${data.length}`
-          res.write(Buffer.concat([headersToBuf(updateHeaders), data]))
+          const valueBuf = toBuf(upd.value)
+          updateHeaders['content-length'] = `${valueBuf.length}`
+          res.write(Buffer.concat([headersToBuf(updateHeaders), valueBuf]))
         } else {
           // Sending a set of patches
           updateHeaders['patches'] = `${upd.patches.length}`
@@ -206,35 +206,37 @@ export function stream(
             // This is a bit gross. We allow patches to be specified as
             // using their raw buffer / string instead of needing to be
             // wrapped. This is simple but allocation-inefficient.
-            if (isStringOrBuf(patch)) patch = {data: patch}
-            const {patchType, range, data} = patch
+            if (isStringOrBuf(patch)) patch = {body: patch}
+            const {range} = patch
 
-            const type = patchType
+            const patchType = patch.patchType
               ?? (range != null ? 'braid' : null)
               ?? opts.patchType
 
-            if (type == null) {
+            if (patchType == null) {
               throw Error('Cannot infer type of patch inside update. Set patch.patchType, patch.range or connection-global opts.patchType.')
             }
 
-            let dataBuf = toBuf(data)
+            let bodyBuf = toBuf(patch.body)
             const patchHeaders: Record<string, string> = {
               ...patch.headers,
-              'content-length': `${dataBuf.length}`,
+              'content-length': `${bodyBuf.length}`,
             }
+
             if (range) patchHeaders['content-range'] = range
-            if (type === 'braid') {
+
+            if (patchType === 'braid') {
               if (range == null) throw Error('Invalid braid patch - expected range header')
               patchHeaders['content-range'] = range
             } else {
               // TODO: Remove this after issue #106 resolves when the
               // patch is set globally. Also note this will probably be
               // renamed to patch-type in a future version of the spec.
-              patchHeaders['content-type'] = type
+              patchHeaders['content-type'] = patchType
             }
 
             messages.push(headersToBuf(patchHeaders))
-            messages.push(dataBuf)
+            messages.push(bodyBuf)
           }
           res.write(Buffer.concat(messages))
 
