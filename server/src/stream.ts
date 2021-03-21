@@ -219,6 +219,7 @@ export function stream(
 
             let dataBuf = toBuf(data)
             const patchHeaders: Record<string, string> = {
+              ...patch.headers,
               'content-length': `${dataBuf.length}`,
             }
             if (range) patchHeaders['content-range'] = range

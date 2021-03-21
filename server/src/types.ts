@@ -25,13 +25,7 @@ type CommonUpdate = {
   /**
    * Additional headers attached to this message when it is broadcast to clients
    */
-  headers?: { [k: string]: string | any }
-
-
-  /**
-   * Note: Braid protocol doesn't currently have a "patch-type", but we're exp-
-   * erimenting with it here.
-   */
+  headers?: Record<string, string>
 }
 
 export type SnapshotUpdate = CommonUpdate & {
@@ -40,6 +34,7 @@ export type SnapshotUpdate = CommonUpdate & {
 }
 
 export type Patch = {
+  headers?: Record<string, string>
   /** Defaults to the patch type of the stream. At least one or the other must be set. */
   patchType?: string
   /** Used for braid patches. Implies patchType = 'braid' */
