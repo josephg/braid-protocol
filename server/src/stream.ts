@@ -50,9 +50,9 @@ interface StateServerOpts {
   onclose?: () => void
 
   /**
-   * Send a heartbeat message every (seconds). Defaults to every 30 seconds.
-   * This is needed to avoid some browsers closing the connection automatically
-   * after a 1 minute timeout.
+   * Send a heartbeat message every (seconds). Defaults to every 30
+   * seconds. This is needed to avoid some browsers (Firefox) closing
+   * the connection automatically after a 1 minute timeout.
    *
    * Set to `null` to disable heartbeat messages.
    */
@@ -156,6 +156,8 @@ export function stream(
     opts.onclose?.()
   })
 
+  // Using newline heartbeats here.
+  // https://github.com/braid-org/braid-spec/issues/104
   if (opts.heartbeatSecs !== null) {
     const heartbeatSecs = opts.heartbeatSecs ?? DEFAULT_HEARTBEAT_SECS
     ;(async () => {
@@ -165,9 +167,7 @@ export function stream(
 
         if (!connected) break
 
-        res.write(`:\n`);
-        // res.write(`event: heartbeat\ndata: \n\n`);
-        // res.write(`data: {}\n\n`)
+        res.write(`\n`);
         res.flush?.()
       }
     })()

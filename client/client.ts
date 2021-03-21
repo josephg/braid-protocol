@@ -28,18 +28,23 @@ const concatBuffers = (a: Uint8Array, b: Uint8Array) => {
 
 const asciiDecoder = new TextDecoder('ascii')
 const headerSepRegex = /\r?\n\r?\n/
+
+/**
+ * Search the buffer for the \r\n\r\n between header and data.
+ *
+ * This method returns null if the header has not been terminated, or
+ * the header string + byte offset of the body.
+ */
 const searchHeaderGap = (buf: Uint8Array): null | [string, number] => {
-  // Search the buffer for the \r\n\r\n between header and data. We have some
-  // confidence the header will be pure ASCII - but even if not, I think the
-  // ascii decoder should always preserve byte length. (I hope.)
+  // We have some confidence the header will be pure ASCII - but even if
+  // not, I think the ascii decoder should always preserve byte length.
+  // (I hope.)
 
-  // This method returns null if the header has not been terminated, or the
-  // header string + byte offset of the body.
-
-  // There's no good methods for doing substring search in an arraybuffer in
-  // javascript, so we'll (somewhat inefficiently) do extra decoding operations.
-  // This is probably fine - though will become inefficient if the chunk size is
-  // particularly large
+  // There's no good methods for doing substring search in an
+  // arraybuffer in javascript, so we'll (somewhat inefficiently) do
+  // extra decoding operations. This is probably fine - though will
+  // become inefficient if the chunk size is particularly large. There's
+  // some libraries on npm which would improve perf here.
   const s = asciiDecoder.decode(buf)
   const match = s.match(headerSepRegex)
 
@@ -93,12 +98,29 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<RawUpdateData> {
   let patches: Array<RawPatch> = []
   let patchesCount: number = 0
 
+  // Trim leading newlines (if any) in buffer
+  const trimNewlines = () => {
+    const enum Char {
+      LineSep = 10,
+      RecordSep = 13,
+    }
+    let i = 0
+    while (i < buffer.length && (buffer[i] === Char.LineSep || buffer[i] === Char.RecordSep)) {
+      i++
+    }
+    if (i > 0) buffer = buffer.slice(i)
+  }
+
   function getNextHeaders(): Record<string, string> | null {
     // Ok, so there's a problem here: We need to search for the
-    // double-newline seperator between header and data. The header should
-    // be pure ASCII, but the data section can (and will) contain utf8
-    // characters. These characters may be split between message chunks,
-    // too! And the named content-length is specified in bytes.
+    // double-newline seperator between header and data. The header
+    // should be pure ASCII, but the data section can (and will) contain
+    // utf8 characters. These characters may be split between message
+    // chunks, too! And the named content-length is specified in bytes.
+
+    // Extra newlines between messages are used for heartbeats.
+    trimNewlines()
+
     const headerData = searchHeaderGap(buffer)
     if (headerData == null) return null
     else {
@@ -121,88 +143,125 @@ async function* readHTTPChunks(res: Response): AsyncGenerator<RawUpdateData> {
     // This is pretty inefficient, but it's probably fine.
     buffer = concatBuffers(buffer, s)
 
-    while (true) {
-      // console.log('while', state, buffer.length, asciiDecoder.decode(buffer))
-      // Read as much as we can.
-      if (state == State.UpdateHeaders) {
-        const nextHeaders = getNextHeaders()
-        if (nextHeaders == null) break // need more bytes
+    // This is the beating heart of the client. The braid protocol is an
+    // HTTP stream with HTTP inside it. To parse braid messages we need
+    // an HTTP parser - so this is a simple low performance
+    // implementation for parsing the HTTP messages we get on the
+    // stream.
+    //
+    // At the highest level the HTTP stream contains *updates*. Each
+    // update contains either a replacement document snapshot, or a set
+    // of one or more patches.
+    //
+    // Each time append() is called, we have some more bytes to process.
+    // The extra data may have any framing - we might get an entire
+    // update, or updates and patches might be chunked in any imaginable
+    // way by intermediate proxies. In the loop below we'll read as much
+    // as we can. Any received updates are chunked out and yielded to
+    // the caller.
+    //
+    // This method has gotten more complex. It might be worth rewriting
+    // it at some point as an async iterator where chunks are awaited.
+    // This would make the manually written state machine simpler to
+    // read, in exchange for more magic and probably a slight drop in
+    // performance.
 
-        versionHeaders = nextHeaders
-        if (versionHeaders['patches']) {
-          patchesCount = parseInt(versionHeaders['patches'], 10)
-          state = State.PatchHeaders
-        } else {
-          state = State.UpdateContent
-        }
-      } else if (state == State.UpdateContent) {
-        if (versionHeaders == null) throw Error('invalid state')
+    loop: while (true) {
+      // We're in 1 of 4 states
+      switch (state) {
+        case State.UpdateHeaders: {
+          const nextHeaders = getNextHeaders()
+          if (nextHeaders == null) break loop // need more bytes
 
-        const contentLength = versionHeaders['content-length']
-        if (contentLength == null) throw Error('Content-Length or Patches required')
-
-        const contentLengthNum = parseInt(contentLength)
-        if (isNaN(contentLengthNum) || contentLengthNum < 0) {
-          throw Error('invalid Content-Length')
-        }
-
-        if (buffer.length < contentLengthNum) break // need more bytes
-
-        const data = buffer.slice(0, contentLengthNum)
-        yield {
-          type: 'snapshot',
-          headers: versionHeaders,
-          data
-        }
-        buffer = buffer.slice(contentLengthNum)
-        versionHeaders = null
-        state = State.UpdateHeaders
-      } else if (state == State.PatchHeaders) {
-        if (versionHeaders == null) throw Error('invalid state')
-
-        patchHeaders = getNextHeaders()
-        if (patchHeaders == null) break // need more bytes
-        state = State.PatchContent
-      } else if (state == State.PatchContent) {
-        if (versionHeaders == null) throw Error('invalid state')
-        if (patchHeaders == null) throw Error('invalid state')
-
-        const contentLength = patchHeaders['content-length']
-        if (contentLength == null) {
-          throw Error('Patch is missing Content-Length header')
-        }
-
-        const contentLengthNum = parseInt(contentLength)
-        if (isNaN(contentLengthNum) || contentLengthNum < 0) {
-          throw Error('invalid Content-Length')
-        }
-
-        if (buffer.length < contentLengthNum) break // more bytes plz
-
-        const data = buffer.slice(0, contentLengthNum)
-
-        // We don't yield yet, because we need all the patches for this
-        // version together. Push onto array and send later.
-        patches.push({ headers: patchHeaders, data })
-        buffer = buffer.slice(contentLengthNum)
-        patchHeaders = null
-
-        // One fewer patches in this version to process
-        patchesCount--
-
-        if (patchesCount == 0) {
-          yield {
-            type: 'patch',
-            headers: versionHeaders,
-            patches
+          versionHeaders = nextHeaders
+          if (versionHeaders['patches']) {
+            patchesCount = parseInt(versionHeaders['patches'])
+            state = State.PatchHeaders
+          } else {
+            state = State.UpdateContent
           }
-          state = State.UpdateHeaders
-          patches = []
+          break
+        }
+
+        case State.UpdateContent: {
+          if (versionHeaders == null) throw Error('invalid state')
+
+          const contentLength = versionHeaders['content-length']
+          if (contentLength == null) throw Error('Content-Length or Patches required')
+
+          const contentLengthNum = parseInt(contentLength)
+          if (isNaN(contentLengthNum) || contentLengthNum < 0) {
+            throw Error('invalid Content-Length')
+          }
+
+          if (buffer.length < contentLengthNum) break loop // need more bytes
+
+          const data = buffer.slice(0, contentLengthNum)
+          yield {
+            type: 'snapshot',
+            headers: versionHeaders,
+            data
+          }
+          buffer = buffer.slice(contentLengthNum)
           versionHeaders = null
+
+          state = State.UpdateHeaders
+          break
+        }
+
+        case State.PatchHeaders: {
+          if (versionHeaders == null) throw Error('invalid state')
+
+          patchHeaders = getNextHeaders()
+          if (patchHeaders == null) break loop // need more bytes
+
+          // Move straight on to reading the patch contents.
+          state = State.PatchContent
+        } // continued
+
+        case State.PatchContent: {
+          if (versionHeaders == null) throw Error('invalid state')
+          if (patchHeaders == null) throw Error('invalid state')
+
+          const contentLength = patchHeaders['content-length']
+          if (contentLength == null) {
+            throw Error('Patch is missing Content-Length header')
+          }
+
+          const contentLengthNum = parseInt(contentLength)
+          if (isNaN(contentLengthNum) || contentLengthNum < 0) {
+            throw Error('invalid Content-Length')
+          }
+
+          if (buffer.length < contentLengthNum) break loop // more bytes plz
+
+          const data = buffer.slice(0, contentLengthNum)
+
+          // We don't yield yet, because we need all the patches for this
+          // version together. Push onto array and send later.
+          patches.push({ headers: patchHeaders, data })
+          buffer = buffer.slice(contentLengthNum)
           patchHeaders = null
-        } else {
-          // Go back to processing next patch (or done)
-          state = State.PatchHeaders
+
+          // One fewer patches in this version to process
+          patchesCount--
+
+          if (patchesCount == 0) {
+            yield {
+              type: 'patch',
+              headers: versionHeaders,
+              patches
+            }
+            state = State.UpdateHeaders
+            patches = []
+            versionHeaders = null
+            patchHeaders = null
+          } else {
+            // Go back to processing next patch (or done)
+            state = State.PatchHeaders
+          }
+
+          break
         }
       }
     }

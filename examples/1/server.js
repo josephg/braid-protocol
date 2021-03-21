@@ -16,6 +16,7 @@ polka()
       const stream = braid.stream(res, {
         initialValue: getDate(),
         contentType: 'text/plain',
+        heartbeatSecs: null,
         onclose() {
           clearInterval(timer)
         },
@@ -23,7 +24,7 @@ polka()
 
       timer = setInterval(() => {
         stream.append({ value: getDate() })
-      }, 1000)
+      }, 65000)
     } else {
       res.end(getDate())
     }
