@@ -1,6 +1,6 @@
 {
   "name": "@josephg/braid-client-raw",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "main": "dist/client.js",
   "types": "dist/client.d.ts",
   "license": "MIT",
@@ -9,6 +9,9 @@
     "ministreamiterator": "^1.0.0",
     "unicount": "^1.1.0"
   },
+  "files": [
+    "dist/*"
+  ],
   "scripts": {
     "prepare": "tsc"
   },

@@ -1,8 +1,8 @@
 
 import { RawSubscribeOpts, subscribe as subscribeInner, UpdateData } from '@josephg/braid-client-raw'
 
-export interface StateClientOptions<Doc = any> extends RawSubscribeOpts {
-  parseDoc?: (contentType: string, content: Uint8Array) => Doc
+export interface ClientOpts<Doc = any> extends RawSubscribeOpts {
+  parseDoc?: (contentType: string | null, content: Uint8Array) => Doc
   applyPatch?: (prevValue: Doc, patchType: string, patch: Uint8Array) => Doc
 
   /**
@@ -50,7 +50,7 @@ export interface StateClientOptions<Doc = any> extends RawSubscribeOpts {
  */
  export async function subscribe<Doc = any>(
   url: string,
-  opts: StateClientOptions<Doc> = {}
+  opts: ClientOpts<Doc> = {}
 ) {
   // type PatchBundle = {
   //   patchType: string,

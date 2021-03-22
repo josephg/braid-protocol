@@ -2,7 +2,9 @@
   "private": true,
   "workspaces": [
     "client-raw",
+    "client",
     "server",
+    "cli",
     "examples/*"
   ],
   "scripts": {
