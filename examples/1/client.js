@@ -1,4 +1,4 @@
-const { subscribe } = require('@josephg/braid-client')
+const { subscribe } = require('@josephg/braid-client-raw')
 
 ;(async () => {
   const { updates } = await subscribe('http://localhost:2001/time')

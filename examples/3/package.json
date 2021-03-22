@@ -4,7 +4,7 @@
   "main": "server.js",
   "license": "MIT",
   "dependencies": {
-    "@josephg/braid-client": "*",
+    "@josephg/braid-client-raw": "*",
     "@josephg/braid-server": "*",
     "@types/body-parser": "^1.19.0",
     "@types/polka": "^0.5.2",
