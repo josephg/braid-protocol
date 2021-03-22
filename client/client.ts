@@ -2,6 +2,8 @@ import { RawPatch, RawUpdateData, Patch, UpdateData } from './types'
 import 'isomorphic-fetch'
 import { Readable } from 'stream'
 
+export * from './types'
+
 const splitOnce = (
   s: string,
   sep: string | RegExp
@@ -386,7 +388,10 @@ export async function subscribe<Doc = any, P = any>(url: string, opts: Subscribe
   }
 }
 
-export interface StateClientOptions<Doc = any> extends RawSubscribeOpts {
+
+// **** High level interface. TODO: Move this into a separate module.
+
+interface StateClientOptions<Doc = any> extends RawSubscribeOpts {
   parseDoc?: (contentType: string, content: Uint8Array) => Doc
   applyPatch?: (prevValue: Doc, patchType: string, patch: Uint8Array) => Doc
 
@@ -433,7 +438,7 @@ export interface StateClientOptions<Doc = any> extends RawSubscribeOpts {
  * - Reconnecting (well, it will)
  * - Waiting for the initial document verion before returning
  */
-export async function subscribeFancy<Doc = any>(
+async function subscribeFancy<Doc = any>(
   url: string,
   opts: StateClientOptions<Doc> = {}
 ) {
