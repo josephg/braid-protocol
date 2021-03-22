@@ -34,7 +34,7 @@ export type SnapshotUpdate<Doc = any> = {
   type: 'snapshot',
   headers: Record<string, string>
   version: string | null,
-  contentType: string,
+  contentType: string | null,
   value: Doc // TODO: value or data?
 }
 

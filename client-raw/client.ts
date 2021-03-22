@@ -307,22 +307,23 @@ export async function subscribeRaw(url: string, opts: RawSubscribeOpts = {}) {
 // ***** TODO: API boundary here.
 
 
-const defaultParseDoc = (contentType: string, content: Uint8Array): any => (
+const defaultParseDoc = (contentType: string | null, content: Uint8Array): any => (
   // This is vastly incomplete and a compatibility nightmare.
-  contentType.startsWith('text/') ? decoder.decode(content)
+  contentType == null ? content
+  : contentType.startsWith('text/') ? decoder.decode(content)
   : contentType.startsWith('application/json') ? JSON.parse(decoder.decode(content))
   : content
 )
 
-const defaultParsePatch = (patchType: string, headers: Record<string, string>, data: Uint8Array): any => (
+const defaultParsePatch = (patchType: string | null, headers: Record<string, string>, data: Uint8Array): any => (
   // This is woefully wrong. Amongst other things, this needs to handle
   // braid patches.
   JSON.parse(decoder.decode(data))
 )
 
 interface SubscribeOpts<Doc = any, Patch = any> extends RawSubscribeOpts {
-  parseDoc?: (contentType: string, content: Uint8Array) => Doc
-  parsePatch?: (patchType: string, headers: Record<string, string>, content: Uint8Array) => Patch
+  parseDoc?: (contentType: string | null, content: Uint8Array) => Doc
+  parsePatch?: (patchType: string | null, headers: Record<string, string>, content: Uint8Array) => Patch
 }
 
 /**
@@ -333,10 +334,10 @@ interface SubscribeOpts<Doc = any, Patch = any> extends RawSubscribeOpts {
  */
 export async function subscribe<Doc = any, P = any>(url: string, opts: SubscribeOpts<Doc, P> = {}) {
   const { streamHeaders, updates: updateStream } = await subscribeRaw(url, opts)
-  const contentType = streamHeaders['content-type']
+  const contentType = streamHeaders['content-type'] as string | undefined ?? null
   // Assuming https://github.com/braid-org/braid-spec/issues/106 is accepted
-  const patchType = streamHeaders['patch-type']
-  const currentVersions: string = streamHeaders['current-versions'] ?? null
+  const patchType = streamHeaders['patch-type'] as string | undefined
+  const currentVersions = (streamHeaders['current-versions'] as string | undefined) ?? null
   const parsePatch = opts.parsePatch ?? defaultParsePatch
   const parseDoc = opts.parseDoc ?? defaultParseDoc
 
@@ -349,7 +350,7 @@ export async function subscribe<Doc = any, P = any>(url: string, opts: Subscribe
           type: 'snapshot',
           headers,
           version: headers['version'] ?? null,
-          contentType: contentType,
+          contentType,
           value,
         }
       } else {
