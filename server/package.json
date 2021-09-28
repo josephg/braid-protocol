@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "license": "MIT",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/josephg/braid-protocol"
+  },
   "dependencies": {
     "ministreamiterator": "^1.0.0"
   },

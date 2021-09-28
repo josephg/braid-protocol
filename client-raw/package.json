@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "main": "dist/client.js",
   "types": "dist/client.d.ts",
-  "license": "MIT",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/josephg/braid-protocol"
+  },
   "dependencies": {
     "isomorphic-fetch": "^3.0.0",
     "ministreamiterator": "^1.0.0",
