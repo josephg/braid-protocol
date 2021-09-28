@@ -191,7 +191,12 @@ export function stream(
         if (updateIsSnapshot(upd)) {
           const valueBuf = toBuf(upd.value)
           updateHeaders['content-length'] = `${valueBuf.length}`
-          res.write(Buffer.concat([headersToBuf(updateHeaders), valueBuf]))
+          res.write(Buffer.concat([
+            headersToBuf(updateHeaders),
+            valueBuf,
+            // Braidjs wants a newline here.
+            // Buffer.from('\n')
+          ]))
         } else {
           // Sending a set of patches
           updateHeaders['patches'] = `${upd.patches.length}`
