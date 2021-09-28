@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "main": "dist/client.js",
   "types": "dist/client.d.ts",
+  "public": true,
   "license": "ISC",
   "repository": {
     "type": "git",
