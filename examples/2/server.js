@@ -1,5 +1,5 @@
 const polka = require('polka')
-const braid = require('@josephg/braid-server')
+const braid = require('@braid-protocol/server')
 
 const genOp = require('ot-text-unicode/test/genOp')
 let doc = 'hi there'

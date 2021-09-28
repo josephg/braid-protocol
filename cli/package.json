@@ -1,11 +1,11 @@
 {
-  "name": "@josephg/braid-cli",
+  "name": "@braid-protocol/cli",
   "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",
   "dependencies": {
-    "@josephg/braid-client": "*",
+    "@braid-protocol/client": "^1",
     "@types/node": "^14.14.35",
     "chalk": "^4.1.0",
     "ts-node": "^9.1.1"

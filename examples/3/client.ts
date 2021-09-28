@@ -1,4 +1,4 @@
-import { subscribeRaw } from '@josephg/braid-client-raw'
+import { subscribeRaw } from '@braid-protocol/client-raw'
 import { JSONOp, type as json1, insertOp, Doc } from 'ot-json1'
 import { Post } from './shared'
 import makeStream, { Stream } from 'ministreamiterator'

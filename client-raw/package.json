@@ -1,6 +1,6 @@
 {
-  "name": "@josephg/braid-client-raw",
-  "version": "0.1.0",
+  "name": "@braid-protocol/client-raw",
+  "version": "1.0.0",
   "main": "dist/client.js",
   "types": "dist/client.d.ts",
   "public": true,

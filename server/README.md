@@ -14,7 +14,7 @@ The braid server works to stream a series of values or patches to any client usi
 const polka = require('polka')
 const sirv = require('sirv')
 const cors = require('cors')
-const braid = require('@josephg/braid-server')
+const braid = require('@braid-protocol/server')
 
 const assets = sirv(__dirname + '/web')
 

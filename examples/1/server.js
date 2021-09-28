@@ -1,7 +1,7 @@
 const polka = require('polka')
 const sirv = require('sirv')
 const cors = require('cors')
-const braid = require('@josephg/braid-server')
+const braid = require('@braid-protocol/server')
 
 const assets = sirv(__dirname + '/web')
 

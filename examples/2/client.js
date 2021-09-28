@@ -1,4 +1,4 @@
-const { subscribe } = require('@josephg/braid-client-raw')
+const { subscribe } = require('@braid-protocol/client-raw')
 const { type } = require('ot-text-unicode')
 
 ;(async () => {

@@ -14,13 +14,13 @@ This library (currently) offers no assistance in making it easy to modify server
 ## Getting started
 
 ```
-npm install --save @josephg/braid-client-raw
+npm install --save @braid-protocol/client-raw
 ```
 
 Then:
 
 ```javascript
-const { subscribe } = require('@josephg/braid-client-raw')
+const { subscribe } = require('@braid-protocol/client-raw')
 
 ;(async () => {
   const { updates } = await subscribe('http://localhost:2001/time')

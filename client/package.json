@@ -1,5 +1,5 @@
 {
-  "name": "@josephg/braid-client",
+  "name": "@braid-protocol/client",
   "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
     "url": "https://github.com/josephg/braid-protocol"
   },
   "dependencies": {
-    "@josephg/braid-client-raw": "*"
+    "@braid-protocol/client-raw": "1.0.0"
   },
   "scripts": {
     "prepare": "tsc"

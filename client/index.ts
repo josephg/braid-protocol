@@ -1,5 +1,5 @@
 
-import { RawSubscribeOpts, subscribe as subscribeInner, UpdateData } from '@josephg/braid-client-raw'
+import { RawSubscribeOpts, subscribe as subscribeInner, UpdateData } from '@braid-protocol/client-raw'
 
 export interface ClientOpts<Doc = any> extends RawSubscribeOpts {
   parseDoc?: (contentType: string | null, content: Uint8Array) => Doc

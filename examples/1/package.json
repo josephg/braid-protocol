@@ -7,8 +7,8 @@
     "prepare": "browserify web/client.js -o web/bundle.js"
   },
   "dependencies": {
-    "@josephg/braid-client-raw": "*",
-    "@josephg/braid-server": "*",
+    "@braid-protocol/client-raw": "*",
+    "@braid-protocol/server": "*",
     "cors": "^2.8.5",
     "polka": "^0.5.2",
     "sirv": "^1.0.11"

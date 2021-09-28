@@ -1,6 +1,6 @@
 import polka from 'polka'
 import bodyParser from 'body-parser'
-import { stream, BraidStream } from '@josephg/braid-server'
+import { stream, BraidStream } from '@braid-protocol/server'
 import { JSONOp, type as json1 } from 'ot-json1'
 import { Post } from './shared'
 

@@ -1,4 +1,4 @@
-import {subscribe} from '@josephg/braid-client'
+import {subscribe} from '@braid-protocol/client'
 import {default as chalk} from 'chalk'
 import {inspect} from 'util'
 
