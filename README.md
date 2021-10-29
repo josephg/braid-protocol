@@ -6,7 +6,13 @@ It implements simple server and client implementations of the protocol, for use 
 
 # Getting started
 
-> TODO: These libraries have not yet been published on npm.
+https://www.npmjs.com/package/@braid-protocol/server
+
+https://www.npmjs.com/package/@braid-protocol/client
+
+https://www.npmjs.com/package/@braid-protocol/cli
+
+https://www.npmjs.com/package/@braid-protocol/client-raw
 
 ## From source
 
