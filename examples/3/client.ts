@@ -97,7 +97,7 @@ const subscribeOT = async <T>(url: string) => {
     // Could just ignore - but this should never happen.
     if (inflightOp == null) throw Error('Invalid call to sendInFlight')
 
-    const res = await fetch('http://localhost:2003/doc', {
+    const res = await fetch(url, {
       method: 'PUT',
       headers: {
         'patch-id': inflightOp.id,
